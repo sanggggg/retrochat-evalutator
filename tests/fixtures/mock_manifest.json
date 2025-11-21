@@ -1,0 +1,28 @@
+{
+  "sessions": [
+    {
+      "file": "mock_session.jsonl",
+      "score": 4.5,
+      "metadata": {
+        "task_type": "code_generation",
+        "date": "2025-11-06"
+      }
+    },
+    {
+      "file": "mock_session_2.jsonl",
+      "score": 4.2,
+      "metadata": {
+        "task_type": "debugging",
+        "date": "2025-11-07"
+      }
+    },
+    {
+      "file": "low_score_session.jsonl",
+      "score": 2.5,
+      "metadata": {
+        "task_type": "refactoring",
+        "date": "2025-11-08"
+      }
+    }
+  ]
+}
