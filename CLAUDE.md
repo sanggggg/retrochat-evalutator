@@ -18,6 +18,8 @@
 
 2. **Evaluation Module**: Scores new chat sessions against learned rubrics using LLM-as-a-judge
 
+3. **Validation Module**: Compares LLM-predicted scores against real scores to measure evaluation accuracy
+
  
 
 ## Tech Stack
@@ -54,7 +56,9 @@ retrochat-evaluator/
 
 │   │   ├── chat_session.py  # ChatSession, ChatMessage, ToolCall
 
-│   │   └── evaluation.py    # RubricScore, EvaluationResult
+│   │   ├── evaluation.py    # RubricScore, EvaluationResult
+
+│   │   └── validation.py    # ValidationReport, SessionValidationResult
 
 │   ├── training/            # Training pipeline
 
@@ -75,6 +79,10 @@ retrochat-evaluator/
 │   │   ├── aggregator.py    # Result aggregation
 
 │   │   └── evaluator.py     # Evaluation orchestrator
+
+│   ├── validation/          # Validation pipeline
+
+│   │   └── validator.py     # Validation orchestrator
 
 │   ├── llm/
 
@@ -191,6 +199,22 @@ uv run retrochat-eval evaluate-batch \
     --sessions-dir ./sessions/ \
 
     --output-dir ./results/
+
+
+
+# Validate rubrics against dataset (compare predicted vs real scores)
+
+uv run retrochat-eval validate \
+
+    --dataset-dir ./raw-data \
+
+    --dataset-manifest ./dataset.json \
+
+    --rubrics ./rubrics.json \
+
+    --score-name efficiency \
+
+    --output ./validation_report.json
 
 ```
 
@@ -386,7 +410,63 @@ Legacy format with single `"score"` field is also supported (converted to `{"def
 
 ```
 
- 
+
+
+### Validation Report (validation_report.json)
+
+```json
+
+{
+
+  "version": "1.0",
+
+  "created_at": "2025-11-21T10:00:00Z",
+
+  "score_name": "efficiency",
+
+  "rubrics_file": "./rubrics.json",
+
+  "total_sessions": 10,
+
+  "metrics": {
+
+    "mean_absolute_error": 0.45,
+
+    "root_mean_squared_error": 0.58,
+
+    "mean_error": -0.12,
+
+    "correlation": 0.92,
+
+    "r_squared": 0.85
+
+  },
+
+  "session_results": [
+
+    {
+
+      "session_id": "session-001",
+
+      "file": "example1.jsonl",
+
+      "predicted_score": 4.2,
+
+      "real_score": 4.5,
+
+      "error": -0.3,
+
+      "absolute_error": 0.3
+
+    }
+
+  ]
+
+}
+
+```
+
+
 
 ## Architecture Notes
 
@@ -414,7 +494,21 @@ Legacy format with single `"score"` field is also supported (converted to `{"def
 
 4. `Evaluator` orchestrates the pipeline
 
- 
+
+
+### Validation Pipeline Flow
+
+1. `DatasetLoader` loads manifest and gets all sessions with target score
+
+2. `Evaluator` evaluates each session against rubrics
+
+3. `Validator` compares predicted vs real scores
+
+4. Calculates metrics (MAE, RMSE, correlation, R-squared)
+
+5. Generates `ValidationReport` with per-session comparison
+
+
 
 ## Code Style
 
