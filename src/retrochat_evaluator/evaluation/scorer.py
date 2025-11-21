@@ -51,7 +51,10 @@ class RubricScorer:
         # Retry once if parsing failed
         if score is None and self.config.retry_on_parse_failure:
             logger.warning(f"Failed to parse score for {rubric.id}, retrying...")
-            retry_prompt = prompt + "\n\nIMPORTANT: Please respond EXACTLY in this format:\nSCORE: [1-5]\nREASONING: [your explanation]"
+            retry_prompt = (
+                prompt
+                + "\n\nIMPORTANT: Please respond EXACTLY in this format:\nSCORE: [1-5]\nREASONING: [your explanation]"
+            )
             response = await self.llm.generate(
                 retry_prompt,
                 temperature=self.config.llm_temperature,

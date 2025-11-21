@@ -66,12 +66,14 @@ class RubricSummarizer:
 
             formatted_parts.append(f"=== Session {session_idx} Rubrics ===")
             for rubric in rubrics:
-                formatted_parts.append(f"""
+                formatted_parts.append(
+                    f"""
 Name: {rubric.name}
 Description: {rubric.description}
 Scoring Criteria: {rubric.scoring_criteria}
 Evidence: {rubric.evidence or 'N/A'}
----""")
+---"""
+                )
 
         return "\n".join(formatted_parts)
 

@@ -14,9 +14,7 @@ class Rubric(BaseModel):
     id: str = Field(..., description="Unique identifier for the rubric (e.g., rubric_001)")
     name: str = Field(..., description="Short descriptive name (2-5 words)")
     description: str = Field(..., description="What this rubric measures (1-2 sentences)")
-    scoring_criteria: str = Field(
-        ..., description="How to score from 1 (poor) to 5 (excellent)"
-    )
+    scoring_criteria: str = Field(..., description="How to score from 1 (poor) to 5 (excellent)")
     weight: float = Field(default=1.0, description="Weight for scoring aggregation")
     evidence: Optional[str] = Field(
         default=None, description="Example evidence from training session"

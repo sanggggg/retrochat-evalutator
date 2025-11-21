@@ -79,7 +79,7 @@ class TestJsonlUtils:
         """Test skipping malformed lines."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"valid": true}\n')
-            f.write('invalid json line\n')
+            f.write("invalid json line\n")
             f.write('{"also_valid": true}\n')
             temp_path = Path(f.name)
 
@@ -93,7 +93,7 @@ class TestJsonlUtils:
         """Test raising on malformed lines."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"valid": true}\n')
-            f.write('invalid json line\n')
+            f.write("invalid json line\n")
             temp_path = Path(f.name)
 
         try:
