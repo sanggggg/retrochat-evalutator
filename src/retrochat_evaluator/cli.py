@@ -13,6 +13,7 @@ from .models.rubric import RubricList
 from .models.chat_session import ChatSession
 from .training.trainer import Trainer
 from .evaluation.evaluator import Evaluator
+from .validation.validator import Validator
 
 
 def setup_logging(verbose: bool) -> None:
@@ -324,6 +325,141 @@ def evaluate_batch(
 
     except Exception as e:
         click.echo(f"Error during batch evaluation: {e}", err=True)
+        if ctx.obj.get("verbose"):
+            import traceback
+
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@main.command()
+@click.option(
+    "--dataset-dir",
+    "-d",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Directory containing JSONL session files",
+)
+@click.option(
+    "--dataset-manifest",
+    "-m",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to dataset manifest JSON file",
+)
+@click.option(
+    "--rubrics",
+    "-r",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to rubrics JSON file",
+)
+@click.option(
+    "--score-name",
+    "-n",
+    type=str,
+    default="default",
+    help="Name of the score to use for comparison (default: 'default')",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=Path("validation_report.json"),
+    help="Output path for validation report (default: validation_report.json)",
+)
+@click.option(
+    "--prompts-dir",
+    "-p",
+    type=click.Path(exists=True, path_type=Path),
+    default=Path("prompts"),
+    help="Directory containing prompt templates (default: prompts/)",
+)
+@click.option(
+    "--max-sessions",
+    type=int,
+    default=None,
+    help="Maximum number of sessions to validate",
+)
+@click.pass_context
+def validate(
+    ctx: click.Context,
+    dataset_dir: Path,
+    dataset_manifest: Path,
+    rubrics: Path,
+    score_name: str,
+    output: Path,
+    prompts_dir: Path,
+    max_sessions: int | None,
+) -> None:
+    """Validate evaluation accuracy by comparing predicted vs real scores.
+
+    This command evaluates each session in the dataset using the provided rubrics,
+    then compares the predicted scores against the actual scores from the manifest.
+    It outputs a validation report with metrics like MAE, RMSE, and correlation.
+    """
+    click.echo(f"Starting validation with score type: '{score_name}'")
+    click.echo(f"Dataset directory: {dataset_dir}")
+    click.echo(f"Manifest: {dataset_manifest}")
+    click.echo(f"Rubrics: {rubrics}")
+
+    validator = Validator(
+        dataset_dir=dataset_dir,
+        manifest_path=dataset_manifest,
+        rubrics_path=rubrics,
+        prompts_dir=prompts_dir,
+        score_name=score_name,
+    )
+
+    try:
+        # Load rubrics to show count
+        rubric_list = RubricList.from_json(rubrics)
+        click.echo(f"Loaded {len(rubric_list.rubrics)} rubrics")
+
+        # Run validation
+        report = asyncio.run(validator.validate(max_sessions=max_sessions))
+
+        if report.total_sessions == 0:
+            click.echo(
+                f"Warning: No sessions found with score '{score_name}'. "
+                "Check your dataset manifest.",
+                err=True,
+            )
+            sys.exit(1)
+
+        # Save report
+        validator.save_report(report, output)
+        click.echo(f"Saved validation report to: {output}")
+
+        # Display summary
+        click.echo(f"\nValidation Summary:")
+        click.echo(f"  Sessions validated: {report.total_sessions}")
+        click.echo(f"  Score type: {report.score_name}")
+
+        click.echo(f"\nMetrics:")
+        click.echo(f"  Mean Absolute Error (MAE): {report.metrics.mean_absolute_error}")
+        click.echo(f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}")
+        click.echo(f"  Mean Error (bias): {report.metrics.mean_error}")
+        if report.metrics.correlation is not None:
+            click.echo(f"  Correlation: {report.metrics.correlation}")
+        if report.metrics.r_squared is not None:
+            click.echo(f"  R-squared: {report.metrics.r_squared}")
+
+        click.echo(f"\nError Range:")
+        click.echo(f"  Min error: {report.metrics.min_error}")
+        click.echo(f"  Max error: {report.metrics.max_error}")
+
+        # Show per-session summary if verbose or few sessions
+        if ctx.obj.get("verbose") or report.total_sessions <= 10:
+            click.echo(f"\nPer-Session Results:")
+            for result in report.session_results:
+                click.echo(
+                    f"  - {result.file}: predicted={result.predicted_score}, "
+                    f"real={result.real_score}, error={result.error:+.4f}"
+                )
+
+    except Exception as e:
+        click.echo(f"Error during validation: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
 
