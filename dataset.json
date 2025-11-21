@@ -1,0 +1,20 @@
+{
+  "sessions": [
+    {
+      "file": "example1.jsonl",
+      "score": 4.5,
+      "metadata": {
+        "task_type": "code_modification",
+        "date": "2025-11-06"
+      }
+    },
+    {
+      "file": "example2.jsonl",
+      "score": 4.2,
+      "metadata": {
+        "task_type": "debugging",
+        "date": "2025-11-07"
+      }
+    }
+  ]
+}
