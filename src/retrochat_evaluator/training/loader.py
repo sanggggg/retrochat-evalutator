@@ -16,8 +16,19 @@ class SessionInfo:
     """Information about a single session from manifest."""
 
     file: str
-    score: float
+    scores: dict[str, float]
     metadata: dict[str, Any]
+
+    def get_score(self, score_name: str) -> float | None:
+        """Get a specific score by name.
+
+        Args:
+            score_name: Name of the score to retrieve.
+
+        Returns:
+            The score value, or None if not found.
+        """
+        return self.scores.get(score_name)
 
 
 @dataclass
@@ -34,10 +45,17 @@ class DatasetManifest:
 
         sessions = []
         for session_data in data.get("sessions", []):
+            # Support both legacy "score" (float) and new "scores" (dict) format
+            scores_data = session_data.get("scores")
+            if scores_data is None:
+                # Legacy format: convert single score to dict with "default" key
+                legacy_score = session_data.get("score")
+                scores_data = {"default": legacy_score} if legacy_score is not None else {}
+
             sessions.append(
                 SessionInfo(
                     file=session_data["file"],
-                    score=session_data["score"],
+                    scores=scores_data,
                     metadata=session_data.get("metadata", {}),
                 )
             )
@@ -66,20 +84,26 @@ class DatasetLoader:
             logger.info(f"Loaded manifest with {len(self._manifest.sessions)} sessions")
         return self._manifest
 
-    def filter_by_score(self, threshold: float) -> list[SessionInfo]:
-        """Return sessions with score >= threshold.
+    def filter_by_score(self, threshold: float, score_name: str = "default") -> list[SessionInfo]:
+        """Return sessions with score >= threshold for the specified score type.
 
         Args:
             threshold: Minimum score threshold.
+            score_name: Name of the score to filter by (default: "default").
 
         Returns:
             List of SessionInfo for qualified sessions.
         """
         manifest = self.load_manifest()
-        qualified = [s for s in manifest.sessions if s.score >= threshold]
+        qualified = []
+        for s in manifest.sessions:
+            score_value = s.get_score(score_name)
+            if score_value is not None and score_value >= threshold:
+                qualified.append(s)
+
         logger.info(
             f"Filtered {len(qualified)}/{len(manifest.sessions)} sessions "
-            f"with score >= {threshold}"
+            f"with {score_name} score >= {threshold}"
         )
         return qualified
 

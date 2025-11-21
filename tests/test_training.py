@@ -25,19 +25,32 @@ class TestDatasetLoader:
 
         assert len(manifest.sessions) == 3
         assert manifest.sessions[0].file == "mock_session.jsonl"
-        assert manifest.sessions[0].score == 4.5
+        assert manifest.sessions[0].scores == {"efficiency": 4.5, "quality": 4.0}
+        assert manifest.sessions[0].get_score("efficiency") == 4.5
 
     def test_filter_by_score(self, fixtures_dir: Path, mock_manifest_path: Path):
         """Test filtering sessions by score threshold."""
         loader = DatasetLoader(fixtures_dir, mock_manifest_path)
 
-        # Filter with threshold 4.0
-        qualified = loader.filter_by_score(4.0)
-        assert len(qualified) == 2  # Two sessions with score >= 4.0
+        # Filter with threshold 4.0 on efficiency score
+        qualified = loader.filter_by_score(4.0, "efficiency")
+        assert len(qualified) == 2  # Two sessions with efficiency score >= 4.0
 
-        # Filter with threshold 4.5
-        qualified = loader.filter_by_score(4.5)
-        assert len(qualified) == 1  # Only one session with score >= 4.5
+        # Filter with threshold 4.5 on efficiency score
+        qualified = loader.filter_by_score(4.5, "efficiency")
+        assert len(qualified) == 1  # Only one session with efficiency score >= 4.5
+
+    def test_filter_by_different_score_name(self, fixtures_dir: Path, mock_manifest_path: Path):
+        """Test filtering sessions by different score types."""
+        loader = DatasetLoader(fixtures_dir, mock_manifest_path)
+
+        # Filter by quality score
+        qualified = loader.filter_by_score(3.9, "quality")
+        assert len(qualified) == 1  # Only one session with quality score >= 3.9
+
+        # Filter by non-existent score name
+        qualified = loader.filter_by_score(4.0, "nonexistent")
+        assert len(qualified) == 0  # No sessions have this score type
 
     def test_load_session(self, fixtures_dir: Path, mock_manifest_path: Path):
         """Test loading individual session."""
@@ -221,7 +234,7 @@ class TestTrainer:
             ]
         )
 
-        config = TrainingConfig(score_threshold=4.0)
+        config = TrainingConfig(score_threshold=4.0, score_name="efficiency")
         trainer = Trainer(
             dataset_dir=fixtures_dir,
             manifest_path=mock_manifest_path,

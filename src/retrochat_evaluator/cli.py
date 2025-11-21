@@ -59,6 +59,13 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="Minimum score threshold for sessions (default: 4.0)",
 )
 @click.option(
+    "--score-name",
+    "-n",
+    type=str,
+    default="default",
+    help="Name of the score to use for filtering (default: 'default')",
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
@@ -84,17 +91,19 @@ def train(
     dataset_dir: Path,
     dataset_manifest: Path,
     score_threshold: float,
+    score_name: str,
     output: Path,
     prompts_dir: Path,
     max_sessions: int | None,
 ) -> None:
     """Train evaluation rubrics from high-quality chat sessions."""
-    click.echo(f"Starting training with score threshold >= {score_threshold}")
+    click.echo(f"Starting training with {score_name} score threshold >= {score_threshold}")
     click.echo(f"Dataset directory: {dataset_dir}")
     click.echo(f"Manifest: {dataset_manifest}")
 
     training_config = TrainingConfig(
         score_threshold=score_threshold,
+        score_name=score_name,
         max_sessions=max_sessions,
     )
 
