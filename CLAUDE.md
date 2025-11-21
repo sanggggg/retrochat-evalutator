@@ -142,13 +142,29 @@ uv run black src/ tests/
 
  
 
-# Train rubrics from dataset
+# Train rubrics from dataset (using default score name)
 
 uv run retrochat-eval train \
 
     --dataset-dir ./raw-data \
 
     --dataset-manifest ./dataset.json \
+
+    --output ./rubrics.json
+
+
+
+# Train rubrics using a specific score type (e.g., efficiency)
+
+uv run retrochat-eval train \
+
+    --dataset-dir ./raw-data \
+
+    --dataset-manifest ./dataset.json \
+
+    --score-name efficiency \
+
+    --score-threshold 4.0 \
 
     --output ./rubrics.json
 
@@ -288,21 +304,41 @@ uv run pytest tests/ -v --cov=retrochat_evaluator
 
 ### Dataset Manifest (dataset.json)
 
+Sessions can have multiple score types (e.g., efficiency, quality). Use `--score-name` to specify which score to use for filtering during training.
+
 ```json
 
 {
 
   "sessions": [
 
-    {"file": "session1.jsonl", "score": 4.5, "metadata": {...}},
+    {
 
-    {"file": "session2.jsonl", "score": 3.2, "metadata": {...}}
+      "file": "session1.jsonl",
+
+      "scores": {"efficiency": 4.5, "quality": 4.2},
+
+      "metadata": {...}
+
+    },
+
+    {
+
+      "file": "session2.jsonl",
+
+      "scores": {"efficiency": 3.2, "quality": 3.8},
+
+      "metadata": {...}
+
+    }
 
   ]
 
 }
 
 ```
+
+Legacy format with single `"score"` field is also supported (converted to `{"default": score}`).
 
  
 
