@@ -2,7 +2,10 @@
   "sessions": [
     {
       "file": "mock_session.jsonl",
-      "score": 4.5,
+      "scores": {
+        "efficiency": 4.5,
+        "quality": 4.0
+      },
       "metadata": {
         "task_type": "code_generation",
         "date": "2025-11-06"
@@ -10,7 +13,10 @@
     },
     {
       "file": "mock_session_2.jsonl",
-      "score": 4.2,
+      "scores": {
+        "efficiency": 4.2,
+        "quality": 3.8
+      },
       "metadata": {
         "task_type": "debugging",
         "date": "2025-11-07"
@@ -18,7 +24,10 @@
     },
     {
       "file": "low_score_session.jsonl",
-      "score": 2.5,
+      "scores": {
+        "efficiency": 2.5,
+        "quality": 3.0
+      },
       "metadata": {
         "task_type": "refactoring",
         "date": "2025-11-08"

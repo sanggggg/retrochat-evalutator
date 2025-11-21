@@ -2,7 +2,10 @@
   "sessions": [
     {
       "file": "example1.jsonl",
-      "score": 4.5,
+      "scores": {
+        "efficiency": 4.5,
+        "quality": 4.2
+      },
       "metadata": {
         "task_type": "code_modification",
         "date": "2025-11-06"
@@ -10,7 +13,10 @@
     },
     {
       "file": "example2.jsonl",
-      "score": 4.2,
+      "scores": {
+        "efficiency": 4.2,
+        "quality": 4.0
+      },
       "metadata": {
         "task_type": "debugging",
         "date": "2025-11-07"
