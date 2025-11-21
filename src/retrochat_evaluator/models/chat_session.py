@@ -86,9 +86,7 @@ class ChatSession(BaseModel):
     """A complete chat session parsed from JSONL."""
 
     session_id: str = Field(..., description="Unique session identifier")
-    messages: list[ChatMessage] = Field(
-        default_factory=list, description="Messages in the session"
-    )
+    messages: list[ChatMessage] = Field(default_factory=list, description="Messages in the session")
     cwd: Optional[str] = Field(default=None, description="Working directory")
     git_branch: Optional[str] = Field(default=None, description="Git branch")
     start_timestamp: Optional[datetime] = Field(default=None, description="Session start time")

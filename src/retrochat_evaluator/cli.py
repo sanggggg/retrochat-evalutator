@@ -125,6 +125,7 @@ def train(
         click.echo(f"Error during training: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 
@@ -208,6 +209,7 @@ def evaluate(
         click.echo(f"Error during evaluation: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 
@@ -304,6 +306,7 @@ def evaluate_batch(
 
         # Display summary statistics
         from .models.evaluation import BatchEvaluationSummary
+
         summary = BatchEvaluationSummary.from_results(results, rubric_names)
         click.echo(f"\nBatch Summary:")
         click.echo(f"  Sessions evaluated: {summary.total_sessions}")
@@ -314,6 +317,7 @@ def evaluate_batch(
         click.echo(f"Error during batch evaluation: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

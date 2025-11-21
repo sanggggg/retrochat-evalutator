@@ -123,7 +123,11 @@ def sample_chat_session() -> ChatSession:
                     ToolCall(
                         tool_id="toolu_002",
                         tool_name="Edit",
-                        tool_input={"file_path": "/test/math.py", "old_string": "...", "new_string": "..."},
+                        tool_input={
+                            "file_path": "/test/math.py",
+                            "old_string": "...",
+                            "new_string": "...",
+                        },
                         tool_result="File edited successfully",
                     )
                 ],
@@ -181,7 +185,7 @@ def mock_llm_client() -> MagicMock:
 @pytest.fixture
 def mock_extractor_response() -> str:
     """Sample LLM response for rubric extraction."""
-    return '''Based on my analysis of this chat session, here are the evaluation rubrics:
+    return """Based on my analysis of this chat session, here are the evaluation rubrics:
 
 ```json
 [
@@ -199,13 +203,13 @@ def mock_extractor_response() -> str:
   }
 ]
 ```
-'''
+"""
 
 
 @pytest.fixture
 def mock_summarizer_response() -> str:
     """Sample LLM response for rubric summarization."""
-    return '''Here is the consolidated set of rubrics:
+    return """Here is the consolidated set of rubrics:
 
 ```json
 {
@@ -228,7 +232,7 @@ def mock_summarizer_response() -> str:
   "consolidation_notes": "Merged similar rubrics about clarity and efficiency"
 }
 ```
-'''
+"""
 
 
 @pytest.fixture

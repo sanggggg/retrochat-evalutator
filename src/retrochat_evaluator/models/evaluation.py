@@ -41,15 +41,11 @@ class EvaluationResult(BaseModel):
     evaluated_at: datetime = Field(
         default_factory=datetime.utcnow, description="When evaluation was performed"
     )
-    rubrics_version: Optional[str] = Field(
-        default=None, description="Version of rubrics used"
-    )
+    rubrics_version: Optional[str] = Field(default=None, description="Version of rubrics used")
     rubric_scores: list[RubricScore] = Field(
         default_factory=list, description="Individual rubric scores"
     )
-    summary: Optional[EvaluationSummary] = Field(
-        default=None, description="Summary statistics"
-    )
+    summary: Optional[EvaluationSummary] = Field(default=None, description="Summary statistics")
 
     def calculate_summary(self, weights: Optional[dict[str, float]] = None) -> EvaluationSummary:
         """Calculate summary statistics from rubric scores."""

@@ -198,9 +198,7 @@ class TestTrainer:
                 "Extract rubrics from:\n{chat_session}"
             )
             # Create summarizer prompt
-            (prompts_dir / "rubric_summarizer.txt").write_text(
-                "Summarize rubrics:\n{all_rubrics}"
-            )
+            (prompts_dir / "rubric_summarizer.txt").write_text("Summarize rubrics:\n{all_rubrics}")
 
             yield prompts_dir
 
@@ -240,9 +238,7 @@ class TestTrainer:
         assert rubric_list.training_config is not None
         assert rubric_list.training_config.sessions_used == 2
 
-    def test_save_rubrics(
-        self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list
-    ):
+    def test_save_rubrics(self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list):
         """Test saving rubrics to file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             prompts_dir = Path(tmpdir) / "prompts"
