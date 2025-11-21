@@ -30,6 +30,7 @@ class TrainingConfig:
     """Configuration for training module."""
 
     score_threshold: float = 4.0
+    score_name: str = "default"
     max_sessions: Optional[int] = None
     max_concurrent_extractions: int = 5
     llm_temperature: float = 0.3

@@ -80,8 +80,12 @@ class Trainer:
         logger.info("Starting training pipeline")
 
         # 1. Load and filter sessions
-        logger.info(f"Filtering sessions with score >= {self.config.score_threshold}")
-        qualified_sessions = self.loader.filter_by_score(self.config.score_threshold)
+        logger.info(
+            f"Filtering sessions with {self.config.score_name} score >= {self.config.score_threshold}"
+        )
+        qualified_sessions = self.loader.filter_by_score(
+            self.config.score_threshold, self.config.score_name
+        )
         total_sessions = self.loader.get_session_count()
 
         if not qualified_sessions:
