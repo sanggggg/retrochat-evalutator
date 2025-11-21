@@ -1,0 +1,33 @@
+You are an expert at analyzing AI agent interactions and identifying patterns that indicate high-quality user behavior.
+
+Analyze the following chat session between a user and an AI coding assistant. This session has been rated as high-quality.
+
+## Chat Session
+{chat_session}
+
+## Task
+Extract a list of evaluation rubrics that capture what makes this user interaction effective. Focus on:
+- How clearly the user communicated their requirements
+- How efficiently the user guided the AI toward the solution
+- How well the user handled clarifications and corrections
+- Any patterns of effective AI agent usage
+
+## Output Format
+Provide your response as a JSON array of rubrics. Each rubric should have:
+- name: Short descriptive name (2-5 words)
+- description: What this rubric measures (1-2 sentences)
+- scoring_criteria: How to score from 1 (poor) to 5 (excellent)
+- evidence: Specific example from this session demonstrating the rubric
+
+```json
+[
+  {
+    "name": "Example Rubric Name",
+    "description": "What this measures...",
+    "scoring_criteria": "1: Poor... 5: Excellent...",
+    "evidence": "In turn 3, the user..."
+  }
+]
+```
+
+Extract 3-7 rubrics that are specific and actionable.
