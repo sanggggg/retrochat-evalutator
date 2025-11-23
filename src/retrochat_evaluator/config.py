@@ -2,10 +2,18 @@
 
 import os
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Optional, Tuple
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+class SummarizationMethod(str, Enum):
+    """Method for consolidating extracted rubrics."""
+
+    LLM = "llm"  # Use LLM prompt-based summarization
+    SEMANTIC_CLUSTERING = "semantic_clustering"  # Use embedding + HAC clustering
 
 
 @dataclass
@@ -35,6 +43,15 @@ class TrainingConfig:
     max_concurrent_extractions: int = 5
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
+
+    # Summarization method configuration
+    summarization_method: SummarizationMethod = SummarizationMethod.LLM
+
+    # Semantic clustering configuration (used when summarization_method == SEMANTIC_CLUSTERING)
+    embedding_model: str = "models/text-embedding-004"
+    similarity_threshold: float = 0.75
+    min_rubrics: int = 5
+    max_rubrics: int = 10
 
 
 @dataclass
