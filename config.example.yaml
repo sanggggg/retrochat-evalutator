@@ -1,0 +1,59 @@
+# Retrochat Evaluator Configuration Example
+# Copy this file to config.yaml and modify as needed
+
+# LLM Configuration for Rubric Extraction (training step 1)
+extraction_llm:
+  model_name: gemini-2.5-pro-preview-06-05
+  temperature: 0.3
+  max_tokens: 4096
+  max_retries: 3
+  retry_delay: 1.0
+
+# LLM Configuration for Rubric Summarization (training step 2)
+summarization_llm:
+  model_name: gemini-2.5-pro-preview-06-05
+  temperature: 0.3
+  max_tokens: 8192
+  max_retries: 3
+  retry_delay: 1.0
+
+# LLM Configuration for Evaluation/Scoring (validate/evaluate)
+evaluation_llm:
+  model_name: gemini-2.5-pro-preview-06-05
+  temperature: 0.1
+  max_tokens: 1024
+  max_retries: 3
+  retry_delay: 1.0
+
+# Training Configuration
+training:
+  score_threshold: 4.0
+  score_name: default
+  max_sessions: null  # null for no limit
+  max_concurrent_extractions: 5
+
+  # Summarization method: "llm" or "semantic_clustering"
+  summarization_method: llm
+
+  # Semantic clustering options (used when summarization_method is semantic_clustering)
+  embedding_model: models/text-embedding-004
+  similarity_threshold: 0.75
+  min_rubrics: 5
+  max_rubrics: 10
+
+# Evaluation Configuration
+evaluation:
+  max_concurrent: 10
+  timeout_per_rubric: 60
+  retry_on_parse_failure: true
+  score_scale: [1, 5]
+
+# Path Configuration
+prompts_dir: prompts
+dataset_dir: ./raw-data
+dataset_manifest: ./dataset.json
+rubrics_path: ./rubrics.json
+output_path: ./output.json
+
+# Logging
+log_level: INFO

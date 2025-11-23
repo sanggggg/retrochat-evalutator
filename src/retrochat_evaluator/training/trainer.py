@@ -6,7 +6,12 @@ from datetime import datetime
 from typing import Optional
 
 from ..models.rubric import Rubric, RubricList, TrainingConfig as RubricTrainingConfig
-from ..config import TrainingConfig, LLMConfig, SummarizationMethod
+from ..config import (
+    TrainingConfig,
+    ExtractionLLMConfig,
+    SummarizationLLMConfig,
+    SummarizationMethod,
+)
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
 from .extractor import RubricExtractor
@@ -25,7 +30,8 @@ class Trainer:
         manifest_path: Path,
         prompts_dir: Path,
         config: Optional[TrainingConfig] = None,
-        llm_config: Optional[LLMConfig] = None,
+        extraction_llm_config: Optional[ExtractionLLMConfig] = None,
+        summarization_llm_config: Optional[SummarizationLLMConfig] = None,
     ):
         """Initialize trainer.
 
@@ -34,24 +40,33 @@ class Trainer:
             manifest_path: Path to the dataset manifest JSON file.
             prompts_dir: Directory containing prompt templates.
             config: Training configuration.
-            llm_config: LLM configuration.
+            extraction_llm_config: LLM configuration for rubric extraction.
+            summarization_llm_config: LLM configuration for rubric summarization.
         """
         self.config = config or TrainingConfig()
-        self.llm_config = llm_config or LLMConfig()
+        self.extraction_llm_config = extraction_llm_config or ExtractionLLMConfig()
+        self.summarization_llm_config = summarization_llm_config or SummarizationLLMConfig()
         self.prompts_dir = Path(prompts_dir)
 
         # Initialize components
         self.loader = DatasetLoader(dataset_dir, manifest_path)
-        self._llm_client: Optional[GeminiClient] = None
+        self._extraction_llm_client: Optional[GeminiClient] = None
+        self._summarization_llm_client: Optional[GeminiClient] = None
         self._extractor: Optional[RubricExtractor] = None
         self._summarizer: Optional[RubricSummarizer] = None
         self._semantic_summarizer: Optional[SemanticClusteringSummarizer] = None
 
-    def _get_llm_client(self) -> GeminiClient:
-        """Get or create LLM client."""
-        if self._llm_client is None:
-            self._llm_client = GeminiClient(self.llm_config)
-        return self._llm_client
+    def _get_extraction_llm_client(self) -> GeminiClient:
+        """Get or create LLM client for extraction."""
+        if self._extraction_llm_client is None:
+            self._extraction_llm_client = GeminiClient(self.extraction_llm_config)
+        return self._extraction_llm_client
+
+    def _get_summarization_llm_client(self) -> GeminiClient:
+        """Get or create LLM client for summarization."""
+        if self._summarization_llm_client is None:
+            self._summarization_llm_client = GeminiClient(self.summarization_llm_config)
+        return self._summarization_llm_client
 
     def _get_extractor(self) -> RubricExtractor:
         """Get or create rubric extractor."""
@@ -66,7 +81,7 @@ class Trainer:
             prompt_filename = prompt_map.get(score_name, "rubric_extractor.txt")
 
             self._extractor = RubricExtractor(
-                llm_client=self._get_llm_client(),
+                llm_client=self._get_extraction_llm_client(),
                 prompt_template_path=Path(prompt_filename),
                 prompts_dir=self.prompts_dir,
             )
@@ -76,7 +91,7 @@ class Trainer:
         """Get or create rubric summarizer."""
         if self._summarizer is None:
             self._summarizer = RubricSummarizer(
-                llm_client=self._get_llm_client(),
+                llm_client=self._get_summarization_llm_client(),
                 prompt_template_path=Path("rubric_summarizer.txt"),
                 prompts_dir=self.prompts_dir,
             )

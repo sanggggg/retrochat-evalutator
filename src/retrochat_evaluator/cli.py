@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
-from .config import Config, TrainingConfig, EvaluationConfig, LLMConfig, SummarizationMethod
+from .config import Config, TrainingConfig, EvaluationConfig, SummarizationMethod
 from .models.rubric import RubricList
 from .models.chat_session import ChatSession
 from .training.trainer import Trainer
@@ -39,45 +39,52 @@ def main(ctx: click.Context, verbose: bool) -> None:
 
 @main.command()
 @click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to YAML config file (overrides other options)",
+)
+@click.option(
     "--dataset-dir",
     "-d",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
+    default=None,
     help="Directory containing JSONL session files",
 )
 @click.option(
     "--dataset-manifest",
     "-m",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
+    default=None,
     help="Path to dataset manifest JSON file",
 )
 @click.option(
     "--score-threshold",
     "-t",
     type=float,
-    default=4.0,
+    default=None,
     help="Minimum score threshold for sessions (default: 4.0)",
 )
 @click.option(
     "--score-name",
     "-n",
     type=str,
-    default="default",
+    default=None,
     help="Name of the score to use for filtering (default: 'default')",
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    default=Path("rubrics.json"),
+    default=None,
     help="Output path for generated rubrics (default: rubrics.json)",
 )
 @click.option(
     "--prompts-dir",
     "-p",
     type=click.Path(exists=True, path_type=Path),
-    default=Path("prompts"),
+    default=None,
     help="Directory containing prompt templates (default: prompts/)",
 )
 @click.option(
@@ -89,74 +96,103 @@ def main(ctx: click.Context, verbose: bool) -> None:
 @click.option(
     "--summarization-method",
     type=click.Choice(["llm", "semantic_clustering"], case_sensitive=False),
-    default="llm",
+    default=None,
     help="Method for consolidating rubrics: 'llm' (prompt-based) or 'semantic_clustering' (embedding + HAC)",
 )
 @click.option(
     "--embedding-model",
     type=str,
-    default="models/text-embedding-004",
+    default=None,
     help="Google AI embedding model for semantic clustering (default: models/text-embedding-004)",
 )
 @click.option(
     "--similarity-threshold",
     type=float,
-    default=0.75,
+    default=None,
     help="Cosine similarity threshold for clustering (0-1, default: 0.75)",
 )
 @click.option(
     "--min-rubrics",
     type=int,
-    default=5,
+    default=None,
     help="Minimum number of rubrics to output (default: 5)",
 )
 @click.option(
     "--max-rubrics",
     type=int,
-    default=10,
+    default=None,
     help="Maximum number of rubrics to output (default: 10)",
 )
 @click.pass_context
 def train(
     ctx: click.Context,
-    dataset_dir: Path,
-    dataset_manifest: Path,
-    score_threshold: float,
-    score_name: str,
-    output: Path,
-    prompts_dir: Path,
+    config: Path | None,
+    dataset_dir: Path | None,
+    dataset_manifest: Path | None,
+    score_threshold: float | None,
+    score_name: str | None,
+    output: Path | None,
+    prompts_dir: Path | None,
     max_sessions: int | None,
-    summarization_method: str,
-    embedding_model: str,
-    similarity_threshold: float,
-    min_rubrics: int,
-    max_rubrics: int,
+    summarization_method: str | None,
+    embedding_model: str | None,
+    similarity_threshold: float | None,
+    min_rubrics: int | None,
+    max_rubrics: int | None,
 ) -> None:
     """Train evaluation rubrics from high-quality chat sessions."""
-    click.echo(f"Starting training with {score_name} score threshold >= {score_threshold}")
+    # Load config from YAML if provided
+    if config:
+        cfg = Config.from_yaml(config)
+        click.echo(f"Loaded config from: {config}")
+    else:
+        cfg = Config.from_env()
+
+    # Override with CLI options (CLI takes precedence)
+    training_config = cfg.training
+    if score_threshold is not None:
+        training_config.score_threshold = score_threshold
+    if score_name is not None:
+        training_config.score_name = score_name
+    if max_sessions is not None:
+        training_config.max_sessions = max_sessions
+    if summarization_method is not None:
+        training_config.summarization_method = SummarizationMethod(summarization_method.lower())
+    if embedding_model is not None:
+        training_config.embedding_model = embedding_model
+    if similarity_threshold is not None:
+        training_config.similarity_threshold = similarity_threshold
+    if min_rubrics is not None:
+        training_config.min_rubrics = min_rubrics
+    if max_rubrics is not None:
+        training_config.max_rubrics = max_rubrics
+
+    # Resolve paths (CLI overrides config)
+    dataset_dir = dataset_dir or cfg.dataset_dir
+    dataset_manifest = dataset_manifest or cfg.dataset_manifest
+    output = output or cfg.output_path or Path("rubrics.json")
+    prompts_dir = prompts_dir or cfg.prompts_dir
+
+    # Validate required paths
+    if not dataset_dir:
+        raise click.UsageError("--dataset-dir is required (or provide via config)")
+    if not dataset_manifest:
+        raise click.UsageError("--dataset-manifest is required (or provide via config)")
+
+    click.echo(
+        f"Starting training with {training_config.score_name} score threshold >= {training_config.score_threshold}"
+    )
     click.echo(f"Dataset directory: {dataset_dir}")
     click.echo(f"Manifest: {dataset_manifest}")
-
-    # Parse summarization method
-    method = SummarizationMethod(summarization_method.lower())
-    click.echo(f"Summarization method: {method.value}")
-
-    training_config = TrainingConfig(
-        score_threshold=score_threshold,
-        score_name=score_name,
-        max_sessions=max_sessions,
-        summarization_method=method,
-        embedding_model=embedding_model,
-        similarity_threshold=similarity_threshold,
-        min_rubrics=min_rubrics,
-        max_rubrics=max_rubrics,
-    )
+    click.echo(f"Summarization method: {training_config.summarization_method.value}")
 
     trainer = Trainer(
         dataset_dir=dataset_dir,
         manifest_path=dataset_manifest,
         prompts_dir=prompts_dir,
         config=training_config,
+        extraction_llm_config=cfg.extraction_llm,
+        summarization_llm_config=cfg.summarization_llm,
     )
 
     try:
@@ -378,45 +414,52 @@ def evaluate_batch(
 
 @main.command()
 @click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to YAML config file (overrides other options)",
+)
+@click.option(
     "--dataset-dir",
     "-d",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
+    default=None,
     help="Directory containing JSONL session files",
 )
 @click.option(
     "--dataset-manifest",
     "-m",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
+    default=None,
     help="Path to dataset manifest JSON file",
 )
 @click.option(
     "--rubrics",
     "-r",
     type=click.Path(exists=True, path_type=Path),
-    required=True,
+    default=None,
     help="Path to rubrics JSON file",
 )
 @click.option(
     "--score-name",
     "-n",
     type=str,
-    default="default",
+    default=None,
     help="Name of the score to use for comparison (default: 'default')",
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    default=Path("validation_report.json"),
+    default=None,
     help="Output path for validation report (default: validation_report.json)",
 )
 @click.option(
     "--prompts-dir",
     "-p",
     type=click.Path(exists=True, path_type=Path),
-    default=Path("prompts"),
+    default=None,
     help="Directory containing prompt templates (default: prompts/)",
 )
 @click.option(
@@ -428,12 +471,13 @@ def evaluate_batch(
 @click.pass_context
 def validate(
     ctx: click.Context,
-    dataset_dir: Path,
-    dataset_manifest: Path,
-    rubrics: Path,
-    score_name: str,
-    output: Path,
-    prompts_dir: Path,
+    config: Path | None,
+    dataset_dir: Path | None,
+    dataset_manifest: Path | None,
+    rubrics: Path | None,
+    score_name: str | None,
+    output: Path | None,
+    prompts_dir: Path | None,
     max_sessions: int | None,
 ) -> None:
     """Validate evaluation accuracy by comparing predicted vs real scores.
@@ -442,6 +486,29 @@ def validate(
     then compares the predicted scores against the actual scores from the manifest.
     It outputs a validation report with metrics like MAE, RMSE, and correlation.
     """
+    # Load config from YAML if provided
+    if config:
+        cfg = Config.from_yaml(config)
+        click.echo(f"Loaded config from: {config}")
+    else:
+        cfg = Config.from_env()
+
+    # Override with CLI options (CLI takes precedence)
+    score_name = score_name or cfg.training.score_name
+    dataset_dir = dataset_dir or cfg.dataset_dir
+    dataset_manifest = dataset_manifest or cfg.dataset_manifest
+    rubrics = rubrics or cfg.rubrics_path
+    output = output or cfg.output_path or Path("validation_report.json")
+    prompts_dir = prompts_dir or cfg.prompts_dir
+
+    # Validate required paths
+    if not dataset_dir:
+        raise click.UsageError("--dataset-dir is required (or provide via config)")
+    if not dataset_manifest:
+        raise click.UsageError("--dataset-manifest is required (or provide via config)")
+    if not rubrics:
+        raise click.UsageError("--rubrics is required (or provide via config)")
+
     click.echo(f"Starting validation with score type: '{score_name}'")
     click.echo(f"Dataset directory: {dataset_dir}")
     click.echo(f"Manifest: {dataset_manifest}")
@@ -453,6 +520,7 @@ def validate(
         rubrics_path=rubrics,
         prompts_dir=prompts_dir,
         score_name=score_name,
+        llm_config=cfg.evaluation_llm,
     )
 
     try:

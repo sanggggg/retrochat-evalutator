@@ -11,7 +11,7 @@ from ..models.validation import (
     SessionValidationResult,
     ValidationReport,
 )
-from ..config import EvaluationConfig, LLMConfig
+from ..config import EvaluationConfig, EvaluationLLMConfig
 from ..training.loader import DatasetLoader, SessionInfo
 from ..evaluation.evaluator import Evaluator
 
@@ -29,7 +29,7 @@ class Validator:
         prompts_dir: Path,
         score_name: str = "default",
         config: Optional[EvaluationConfig] = None,
-        llm_config: Optional[LLMConfig] = None,
+        llm_config: Optional[EvaluationLLMConfig] = None,
     ):
         """Initialize validator.
 
@@ -40,7 +40,7 @@ class Validator:
             prompts_dir: Directory containing prompt templates.
             score_name: Name of the score to use for comparison.
             config: Evaluation configuration.
-            llm_config: LLM configuration.
+            llm_config: LLM configuration for evaluation.
         """
         self.dataset_dir = Path(dataset_dir)
         self.manifest_path = Path(manifest_path)
@@ -49,7 +49,7 @@ class Validator:
         self.score_name = score_name
 
         self.config = config or EvaluationConfig()
-        self.llm_config = llm_config or LLMConfig()
+        self.llm_config = llm_config or EvaluationLLMConfig()
 
         # Initialize components
         self._loader: Optional[DatasetLoader] = None

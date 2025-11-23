@@ -7,7 +7,7 @@ from typing import Optional
 from ..models.rubric import Rubric, RubricList
 from ..models.chat_session import ChatSession
 from ..models.evaluation import EvaluationResult, BatchEvaluationSummary
-from ..config import EvaluationConfig, LLMConfig
+from ..config import EvaluationConfig, EvaluationLLMConfig
 from ..llm.gemini import GeminiClient
 from .judge import JudgePromptGenerator
 from .scorer import RubricScorer
@@ -23,17 +23,17 @@ class Evaluator:
         self,
         prompts_dir: Path,
         config: Optional[EvaluationConfig] = None,
-        llm_config: Optional[LLMConfig] = None,
+        llm_config: Optional[EvaluationLLMConfig] = None,
     ):
         """Initialize evaluator.
 
         Args:
             prompts_dir: Directory containing prompt templates.
             config: Evaluation configuration.
-            llm_config: LLM configuration.
+            llm_config: LLM configuration for evaluation.
         """
         self.config = config or EvaluationConfig()
-        self.llm_config = llm_config or LLMConfig()
+        self.llm_config = llm_config or EvaluationLLMConfig()
         self.prompts_dir = Path(prompts_dir)
 
         # Initialize components

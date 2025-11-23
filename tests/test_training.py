@@ -242,8 +242,9 @@ class TestTrainer:
             prompts_dir=prompts_dir,
             config=config,
         )
-        # Inject mock client directly
-        trainer._llm_client = mock_client
+        # Inject mock clients directly
+        trainer._extraction_llm_client = mock_client
+        trainer._summarization_llm_client = mock_client
 
         rubric_list = await trainer.train()
 
@@ -601,7 +602,7 @@ class TestTrainerWithSemanticClustering:
             config=config,
         )
         # Inject mock client for extraction only
-        trainer._llm_client = mock_client
+        trainer._extraction_llm_client = mock_client
 
         # Mock the embeddings generation for semantic clustering
         # Each extraction returns 2 rubrics, so 4 total rubrics

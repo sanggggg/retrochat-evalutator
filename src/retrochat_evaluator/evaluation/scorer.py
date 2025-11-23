@@ -40,11 +40,7 @@ class RubricScorer:
         Returns:
             RubricScore with the evaluation result.
         """
-        response = await self.llm.generate(
-            prompt,
-            temperature=self.config.llm_temperature,
-            max_tokens=self.config.llm_max_tokens,
-        )
+        response = await self.llm.generate(prompt)
 
         score, reasoning = self._parse_score(response)
 
@@ -55,10 +51,7 @@ class RubricScorer:
                 prompt
                 + "\n\nIMPORTANT: Please respond EXACTLY in this format:\nSCORE: [1-5]\nREASONING: [your explanation]"
             )
-            response = await self.llm.generate(
-                retry_prompt,
-                temperature=self.config.llm_temperature,
-            )
+            response = await self.llm.generate(retry_prompt)
             score, reasoning = self._parse_score(response)
 
         # Default to middle score if still failed
