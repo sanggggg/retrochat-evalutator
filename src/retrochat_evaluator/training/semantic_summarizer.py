@@ -237,7 +237,7 @@ class SemanticClusteringSummarizer:
                 description=original_rubric.description,
                 scoring_criteria=original_rubric.scoring_criteria,
                 weight=1.0,
-                evidence=original_rubric.evidence,
+                evidence=None,
             )
             final_rubrics.append(new_rubric)
 
@@ -263,7 +263,7 @@ class SemanticClusteringSummarizer:
                     description=rubric.description,
                     scoring_criteria=rubric.scoring_criteria,
                     weight=1.0,
-                    evidence=rubric.evidence,
+                    evidence=None,
                 )
                 unique_rubrics.append(new_rubric)
 

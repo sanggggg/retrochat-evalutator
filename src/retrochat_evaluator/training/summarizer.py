@@ -71,7 +71,6 @@ class RubricSummarizer:
 Name: {rubric.name}
 Description: {rubric.description}
 Scoring Criteria: {rubric.scoring_criteria}
-Evidence: {rubric.evidence or 'N/A'}
 ---"""
                 )
 
@@ -116,6 +115,7 @@ Evidence: {rubric.evidence or 'N/A'}
                     description=rdata.get("description", ""),
                     scoring_criteria=rdata.get("scoring_criteria", ""),
                     weight=rdata.get("weight", 1.0),
+                    evidence=None,
                 )
                 rubrics.append(rubric)
             except Exception as e:
