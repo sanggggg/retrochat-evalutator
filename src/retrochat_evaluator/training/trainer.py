@@ -64,7 +64,7 @@ class Trainer:
                 "excellence": "rubric_extractor_excellence.txt",
             }
             prompt_filename = prompt_map.get(score_name, "rubric_extractor.txt")
-            
+
             self._extractor = RubricExtractor(
                 llm_client=self._get_llm_client(),
                 prompt_template_path=Path(prompt_filename),
