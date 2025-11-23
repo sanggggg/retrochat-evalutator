@@ -56,9 +56,18 @@ class Trainer:
     def _get_extractor(self) -> RubricExtractor:
         """Get or create rubric extractor."""
         if self._extractor is None:
+            # Map score_name to corresponding prompt template
+            score_name = self.config.score_name
+            prompt_map = {
+                "token_efficiency": "rubric_extractor_token_efficiency.txt",
+                "user_turn_efficiency": "rubric_extractor_user_turn_efficiency.txt",
+                "excellence": "rubric_extractor_excellence.txt",
+            }
+            prompt_filename = prompt_map.get(score_name, "rubric_extractor.txt")
+            
             self._extractor = RubricExtractor(
                 llm_client=self._get_llm_client(),
-                prompt_template_path=Path("rubric_extractor.txt"),
+                prompt_template_path=Path(prompt_filename),
                 prompts_dir=self.prompts_dir,
             )
         return self._extractor

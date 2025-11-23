@@ -63,3 +63,4 @@ Thumbs.db
 
 # dataset
 input/**/*
+dataset.json

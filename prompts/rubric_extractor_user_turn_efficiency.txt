@@ -1,0 +1,34 @@
+You are an expert at analyzing AI agent interactions and identifying patterns that indicate high user turn efficiency.
+
+Analyze the following chat session between a user and an AI coding assistant. This session has been rated as high-quality based on user turn efficiency (code growth per user message turn).
+
+## Chat Session
+{chat_session}
+
+## Task
+Extract a list of evaluation rubrics that capture what makes this user interaction efficient in terms of user turns. Focus on:
+- How the user achieved maximum progress with minimal message exchanges
+- How the user provided comprehensive requirements upfront to avoid multiple clarification rounds
+- How the user effectively guided the AI toward solutions without excessive iteration
+- How the user structured their requests to get substantial results in fewer turns
+- Patterns of effective communication that minimize the number of back-and-forth exchanges
+
+## Output Format
+Provide your response as a JSON array of rubrics. Each rubric should have:
+- name: Short descriptive name (2-5 words)
+- description: What this rubric measures (1-2 sentences)
+- scoring_criteria: How to score from 1 (poor) to 5 (excellent)
+- evidence: Specific example from this session demonstrating the rubric
+
+```json
+[
+  {
+    "name": "Example Rubric Name",
+    "description": "What this measures...",
+    "scoring_criteria": "1: Poor... 5: Excellent...",
+    "evidence": "In turn 3, the user..."
+  }
+]
+```
+
+Extract 3-7 rubrics that are specific and actionable, focusing on user turn efficiency patterns.
