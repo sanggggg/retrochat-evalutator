@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
-from .config import Config, TrainingConfig, EvaluationConfig, LLMConfig
+from .config import Config, TrainingConfig, EvaluationConfig, LLMConfig, SummarizationMethod
 from .models.rubric import RubricList
 from .models.chat_session import ChatSession
 from .training.trainer import Trainer
@@ -86,6 +86,36 @@ def main(ctx: click.Context, verbose: bool) -> None:
     default=None,
     help="Maximum number of sessions to use for training",
 )
+@click.option(
+    "--summarization-method",
+    type=click.Choice(["llm", "semantic_clustering"], case_sensitive=False),
+    default="llm",
+    help="Method for consolidating rubrics: 'llm' (prompt-based) or 'semantic_clustering' (embedding + HAC)",
+)
+@click.option(
+    "--embedding-model",
+    type=str,
+    default="models/text-embedding-004",
+    help="Google AI embedding model for semantic clustering (default: models/text-embedding-004)",
+)
+@click.option(
+    "--similarity-threshold",
+    type=float,
+    default=0.75,
+    help="Cosine similarity threshold for clustering (0-1, default: 0.75)",
+)
+@click.option(
+    "--min-rubrics",
+    type=int,
+    default=5,
+    help="Minimum number of rubrics to output (default: 5)",
+)
+@click.option(
+    "--max-rubrics",
+    type=int,
+    default=10,
+    help="Maximum number of rubrics to output (default: 10)",
+)
 @click.pass_context
 def train(
     ctx: click.Context,
@@ -96,16 +126,30 @@ def train(
     output: Path,
     prompts_dir: Path,
     max_sessions: int | None,
+    summarization_method: str,
+    embedding_model: str,
+    similarity_threshold: float,
+    min_rubrics: int,
+    max_rubrics: int,
 ) -> None:
     """Train evaluation rubrics from high-quality chat sessions."""
     click.echo(f"Starting training with {score_name} score threshold >= {score_threshold}")
     click.echo(f"Dataset directory: {dataset_dir}")
     click.echo(f"Manifest: {dataset_manifest}")
 
+    # Parse summarization method
+    method = SummarizationMethod(summarization_method.lower())
+    click.echo(f"Summarization method: {method.value}")
+
     training_config = TrainingConfig(
         score_threshold=score_threshold,
         score_name=score_name,
         max_sessions=max_sessions,
+        summarization_method=method,
+        embedding_model=embedding_model,
+        similarity_threshold=similarity_threshold,
+        min_rubrics=min_rubrics,
+        max_rubrics=max_rubrics,
     )
 
     trainer = Trainer(

@@ -6,11 +6,12 @@ from datetime import datetime
 from typing import Optional
 
 from ..models.rubric import Rubric, RubricList, TrainingConfig as RubricTrainingConfig
-from ..config import TrainingConfig, LLMConfig
+from ..config import TrainingConfig, LLMConfig, SummarizationMethod
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
 from .extractor import RubricExtractor
 from .summarizer import RubricSummarizer
+from .semantic_summarizer import SemanticClusteringSummarizer
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class Trainer:
         self._llm_client: Optional[GeminiClient] = None
         self._extractor: Optional[RubricExtractor] = None
         self._summarizer: Optional[RubricSummarizer] = None
+        self._semantic_summarizer: Optional[SemanticClusteringSummarizer] = None
 
     def _get_llm_client(self) -> GeminiClient:
         """Get or create LLM client."""
@@ -70,6 +72,17 @@ class Trainer:
                 prompts_dir=self.prompts_dir,
             )
         return self._summarizer
+
+    def _get_semantic_summarizer(self) -> SemanticClusteringSummarizer:
+        """Get or create semantic clustering summarizer."""
+        if self._semantic_summarizer is None:
+            self._semantic_summarizer = SemanticClusteringSummarizer(
+                embedding_model=self.config.embedding_model,
+                similarity_threshold=self.config.similarity_threshold,
+                min_rubrics=self.config.min_rubrics,
+                max_rubrics=self.config.max_rubrics,
+            )
+        return self._semantic_summarizer
 
     async def train(self) -> RubricList:
         """Execute full training pipeline.
@@ -120,8 +133,11 @@ class Trainer:
             return RubricList(rubrics=[])
 
         # 4. Summarize into final rubrics
-        logger.info("Consolidating rubrics")
-        summarizer = self._get_summarizer()
+        logger.info(f"Consolidating rubrics using method: {self.config.summarization_method.value}")
+        if self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING:
+            summarizer = self._get_semantic_summarizer()
+        else:
+            summarizer = self._get_summarizer()
         final_rubrics, consolidation_notes = await summarizer.summarize(non_empty_lists)
 
         # 5. Create RubricList with metadata
