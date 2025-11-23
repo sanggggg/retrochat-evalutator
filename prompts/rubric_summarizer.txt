@@ -17,18 +17,18 @@ Create a final list of 5-10 evaluation rubrics by:
 Provide your response as a JSON object with the final rubrics:
 
 ```json
-{
+{{
   "rubrics": [
-    {
+    {{
       "id": "rubric_001",
       "name": "Clear Initial Requirements",
       "description": "The user provides complete, unambiguous requirements in their initial request",
       "scoring_criteria": "1: Vague request requiring multiple clarifications\n2: Partial requirements, missing key details\n3: Adequate requirements with minor gaps\n4: Clear requirements with most details\n5: Comprehensive requirements covering edge cases",
       "weight": 1.0
-    }
+    }}
   ],
   "consolidation_notes": "Brief explanation of how rubrics were merged/prioritized"
-}
+}}
 ```
 
 Ensure each rubric:

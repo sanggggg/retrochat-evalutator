@@ -68,6 +68,7 @@ class TrainingConfig:
     score_threshold: float = 4.0
     score_name: str = "default"
     max_sessions: Optional[int] = None
+    sample_size: Optional[int] = None  # Limit to small sample for testing/debugging
     max_concurrent_extractions: int = 5
 
     # Summarization method configuration

@@ -94,6 +94,12 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="Maximum number of sessions to use for training",
 )
 @click.option(
+    "--sample-size",
+    type=int,
+    default=None,
+    help="Limit to small sample size for testing/debugging (e.g., 5). Takes precedence over max-sessions if set.",
+)
+@click.option(
     "--summarization-method",
     type=click.Choice(["llm", "semantic_clustering"], case_sensitive=False),
     default=None,
@@ -134,6 +140,7 @@ def train(
     output: Path | None,
     prompts_dir: Path | None,
     max_sessions: int | None,
+    sample_size: int | None,
     summarization_method: str | None,
     embedding_model: str | None,
     similarity_threshold: float | None,
@@ -156,6 +163,8 @@ def train(
         training_config.score_name = score_name
     if max_sessions is not None:
         training_config.max_sessions = max_sessions
+    if sample_size is not None:
+        training_config.sample_size = sample_size
     if summarization_method is not None:
         training_config.summarization_method = SummarizationMethod(summarization_method.lower())
     if embedding_model is not None:

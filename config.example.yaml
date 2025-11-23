@@ -30,6 +30,7 @@ training:
   score_threshold: 4.0
   score_name: default
   max_sessions: null  # null for no limit
+  sample_size: null  # Limit to small sample for testing (e.g., 5). Takes precedence over max_sessions if set.
   max_concurrent_extractions: 5
 
   # Summarization method: "llm" or "semantic_clustering"

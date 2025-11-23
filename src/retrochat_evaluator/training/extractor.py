@@ -48,6 +48,16 @@ class RubricExtractor:
 
         logger.debug(f"Extracting rubrics from session {session.session_id}")
         response = await self.llm.generate(prompt)
+        
+        if not response:
+            logger.warning(f"Empty response from LLM for session {session.session_id}")
+            return []
+        
+        if not isinstance(response, str):
+            logger.warning(
+                f"Unexpected response type {type(response).__name__} for session {session.session_id}"
+            )
+            return []
 
         return self._parse_rubrics(response, session.session_id)
 
@@ -72,7 +82,11 @@ class RubricExtractor:
                 try:
                     return await self.extract(session)
                 except Exception as e:
-                    logger.error(f"Failed to extract from session {session.session_id}: {e}")
+                    logger.error(
+                        f"Failed to extract from session {session.session_id}: "
+                        f"{type(e).__name__}: {e}",
+                        exc_info=True
+                    )
                     return []
 
         tasks = [bounded_extract(session) for session in sessions]
@@ -93,21 +107,52 @@ class RubricExtractor:
         Returns:
             List of parsed Rubric objects.
         """
-        # Try to find JSON array in response
-        json_match = re.search(r"\[[\s\S]*\]", response)
-        if not json_match:
-            logger.warning(f"No JSON array found in response for session {session_id}")
-            return []
+        # First, try to extract JSON from markdown code blocks if present
+        json_text = response
+        code_block_match = re.search(r"```(?:json)?\s*(\[[\s\S]*?\])\s*```", response, re.DOTALL)
+        if code_block_match:
+            json_text = code_block_match.group(1)
+            logger.debug(f"Found JSON in code block for session {session_id}")
+        else:
+            # Try to find JSON array in response
+            json_match = re.search(r"\[[\s\S]*?\]", response, re.DOTALL)
+            if json_match:
+                json_text = json_match.group(0)
+            else:
+                logger.warning(
+                    f"No JSON array found in response for session {session_id}. "
+                    f"Response preview: {response[:200]}..."
+                )
+                return []
 
         try:
-            rubrics_data = json.loads(json_match.group())
+            rubrics_data = json.loads(json_text)
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse JSON for session {session_id}: {e}")
+            logger.warning(
+                f"Failed to parse JSON for session {session_id}: {e}\n"
+                f"JSON text preview: {json_text[:500]}..."
+            )
+            return []
+
+        # Validate that we got a list
+        if not isinstance(rubrics_data, list):
+            logger.warning(
+                f"Expected JSON array but got {type(rubrics_data).__name__} "
+                f"for session {session_id}"
+            )
             return []
 
         rubrics = []
         for i, data in enumerate(rubrics_data):
             try:
+                # Validate that each item is a dict
+                if not isinstance(data, dict):
+                    logger.warning(
+                        f"Expected dict for rubric {i} in session {session_id}, "
+                        f"got {type(data).__name__}: {data}"
+                    )
+                    continue
+
                 rubric = Rubric(
                     id=f"extracted_{session_id[:8]}_{i:03d}",
                     name=data.get("name", f"Rubric {i+1}"),
@@ -117,7 +162,10 @@ class RubricExtractor:
                 )
                 rubrics.append(rubric)
             except Exception as e:
-                logger.warning(f"Failed to create rubric {i} for session {session_id}: {e}")
+                logger.warning(
+                    f"Failed to create rubric {i} for session {session_id}: {e}\n"
+                    f"Data: {data}"
+                )
 
         logger.debug(f"Parsed {len(rubrics)} rubrics from session {session_id}")
         return rubrics

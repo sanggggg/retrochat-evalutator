@@ -131,9 +131,13 @@ class Trainer:
 
         # 2. Load chat content for each session
         logger.info("Loading chat sessions")
+        # Use sample_size if set, otherwise use max_sessions
+        max_sessions = self.config.sample_size if self.config.sample_size is not None else self.config.max_sessions
+        if self.config.sample_size is not None:
+            logger.info(f"Using sample size limit: {self.config.sample_size} sessions")
         chat_sessions = self.loader.load_sessions(
             qualified_sessions,
-            max_sessions=self.config.max_sessions,
+            max_sessions=max_sessions,
         )
 
         if len(chat_sessions) < 3:

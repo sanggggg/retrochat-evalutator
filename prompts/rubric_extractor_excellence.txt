@@ -22,12 +22,12 @@ Provide your response as a JSON array of rubrics. Each rubric should have:
 
 ```json
 [
-  {
+  {{
     "name": "Example Rubric Name",
     "description": "What this measures...",
     "scoring_criteria": "1: Poor... 5: Excellent...",
     "evidence": "In turn 3, the user..."
-  }
+  }}
 ]
 ```
 
