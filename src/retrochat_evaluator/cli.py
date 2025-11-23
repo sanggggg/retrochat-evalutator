@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 from dotenv import load_dotenv
+from langchain_core.callbacks import get_usage_metadata_callback
 
 from .config import Config, TrainingConfig, EvaluationConfig, SummarizationMethod
 from .models.rubric import RubricList
@@ -24,6 +25,118 @@ def setup_logging(verbose: bool) -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+
+
+def get_model_pricing(model_name: str) -> tuple[float, float]:
+    """Get input and output token pricing per 1M tokens for a model.
+    
+    Args:
+        model_name: The model name (e.g., 'gemini-2.5-pro', 'gemini-2.5-flash-lite')
+        
+    Returns:
+        Tuple of (input_price_per_1M, output_price_per_1M) in USD.
+        Returns (0.0, 0.0) if model pricing is not found.
+        
+    Reference: https://ai.google.dev/gemini-api/docs/pricing
+    """
+    model_lower = model_name.lower()
+    
+    # Gemini 3 Pro Preview
+    if "gemini-3-pro" in model_lower and "image" not in model_lower:
+        # For prompts <= 200k tokens: $1.00 input, $6.00 output
+        # For prompts > 200k tokens: $2.00 input, $9.00 output
+        # We'll use the <= 200k pricing as default (most common case)
+        return (1.00, 6.00)
+    
+    # Gemini 2.5 Pro
+    if "gemini-2.5-pro" in model_lower and "flash" not in model_lower:
+        # For prompts <= 200k tokens: $0.625 input, $1.25 output
+        # For prompts > 200k tokens: $5.00 input, $7.50 output
+        return (0.625, 5.00)
+    
+    # Gemini 2.5 Flash
+    if "gemini-2.5-flash" in model_lower and "lite" not in model_lower:
+        return (0.15, 1.25)
+    
+    # Gemini 2.5 Flash-Lite
+    if "gemini-2.5-flash-lite" in model_lower:
+        return (0.05, 0.20)
+    
+    # Default: unknown model, return 0
+    return (0.0, 0.0)
+
+
+def calculate_cost(input_tokens: int, output_tokens: int, input_price: float, output_price: float) -> float:
+    """Calculate total cost in USD.
+    
+    Args:
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        input_price: Price per 1M input tokens
+        output_price: Price per 1M output tokens
+        
+    Returns:
+        Total cost in USD
+    """
+    input_cost = (input_tokens / 1_000_000) * input_price
+    output_cost = (output_tokens / 1_000_000) * output_price
+    return input_cost + output_cost
+
+
+def format_token_usage(usage_metadata: dict) -> None:
+    """Format and display token usage with cost information.
+    
+    Args:
+        usage_metadata: Token usage metadata from LangChain callback
+    """
+    if not usage_metadata:
+        return
+    
+    click.echo("\n" + "=" * 60)
+    click.echo("Token Usage Summary:")
+    click.echo("=" * 60)
+    
+    total_input = 0
+    total_output = 0
+    total_tokens = 0
+    total_cost = 0.0
+    
+    for model_name, usage in usage_metadata.items():
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        total = usage.get("total_tokens", 0)
+        
+        total_input += input_tokens
+        total_output += output_tokens
+        total_tokens += total
+        
+        # Get pricing for this model
+        input_price, output_price = get_model_pricing(model_name)
+        cost = calculate_cost(input_tokens, output_tokens, input_price, output_price)
+        total_cost += cost
+        
+        click.echo(f"\n{model_name}:")
+        click.echo(f"  Input tokens:  {input_tokens:,}")
+        click.echo(f"  Output tokens: {output_tokens:,}")
+        click.echo(f"  Total tokens:  {total:,}")
+        
+        if input_price > 0 or output_price > 0:
+            input_cost = (input_tokens / 1_000_000) * input_price
+            output_cost = (output_tokens / 1_000_000) * output_price
+            click.echo(f"  Input cost:    ${input_cost:.6f} (${input_price:.3f} per 1M tokens)")
+            click.echo(f"  Output cost:   ${output_cost:.6f} (${output_price:.3f} per 1M tokens)")
+            click.echo(f"  Total cost:    ${cost:.6f}")
+        else:
+            click.echo(f"  Cost:          Unknown pricing for this model")
+    
+    click.echo("\n" + "-" * 60)
+    click.echo("Total across all models:")
+    click.echo(f"  Input tokens:  {total_input:,}")
+    click.echo(f"  Output tokens: {total_output:,}")
+    click.echo(f"  Total tokens:  {total_tokens:,}")
+    if total_cost > 0:
+        click.echo(f"  Total cost:    ${total_cost:.6f} USD")
+    click.echo("=" * 60)
 
 
 @click.group()
@@ -205,20 +318,25 @@ def train(
     )
 
     try:
-        rubrics = asyncio.run(trainer.train())
+        with get_usage_metadata_callback() as cb:
+            rubrics = asyncio.run(trainer.train())
 
-        if not rubrics.rubrics:
-            click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
-            sys.exit(1)
+            if not rubrics.rubrics:
+                click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
+                sys.exit(1)
 
-        trainer.save_rubrics(rubrics, output)
-        click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
-        click.echo(f"Saved to: {output}")
+            trainer.save_rubrics(rubrics, output)
+            click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
+            click.echo(f"Saved to: {output}")
 
-        # Display rubric summary
-        click.echo("\nGenerated Rubrics:")
-        for rubric in rubrics.rubrics:
-            click.echo(f"  - {rubric.id}: {rubric.name}")
+            # Display rubric summary
+            click.echo("\nGenerated Rubrics:")
+            for rubric in rubrics.rubrics:
+                click.echo(f"  - {rubric.id}: {rubric.name}")
+
+            # Display token usage
+            if cb.usage_metadata:
+                format_token_usage(cb.usage_metadata)
 
     except Exception as e:
         click.echo(f"Error during training: {e}", err=True)
@@ -281,28 +399,34 @@ def evaluate(
 
         # Create evaluator and run
         evaluator = Evaluator(prompts_dir=prompts_dir)
-        result = asyncio.run(
-            evaluator.evaluate(
-                rubrics=rubric_list.rubrics,
-                session=chat_session,
-                rubrics_version=rubric_list.version,
+        
+        with get_usage_metadata_callback() as cb:
+            result = asyncio.run(
+                evaluator.evaluate(
+                    rubrics=rubric_list.rubrics,
+                    session=chat_session,
+                    rubrics_version=rubric_list.version,
+                )
             )
-        )
 
-        # Save result
-        evaluator.save_result(result, output)
-        click.echo(f"Saved result to: {output}")
+            # Save result
+            evaluator.save_result(result, output)
+            click.echo(f"Saved result to: {output}")
 
-        # Display summary
-        click.echo(f"\nEvaluation Summary:")
-        click.echo(f"  Session ID: {result.session_id}")
-        click.echo(
-            f"  Total Score: {result.summary.total_score}/{result.summary.max_score} "
-            f"({result.summary.percentage}%)"
-        )
-        click.echo(f"\nPer-Rubric Scores:")
-        for score in result.rubric_scores:
-            click.echo(f"  - {score.rubric_name}: {score.score}/{score.max_score}")
+            # Display summary
+            click.echo(f"\nEvaluation Summary:")
+            click.echo(f"  Session ID: {result.session_id}")
+            click.echo(
+                f"  Total Score: {result.summary.total_score}/{result.summary.max_score} "
+                f"({result.summary.percentage}%)"
+            )
+            click.echo(f"\nPer-Rubric Scores:")
+            for score in result.rubric_scores:
+                click.echo(f"  - {score.rubric_name}: {score.score}/{score.max_score}")
+
+            # Display token usage
+            if cb.usage_metadata:
+                format_token_usage(cb.usage_metadata)
 
     except Exception as e:
         click.echo(f"Error during evaluation: {e}", err=True)
@@ -387,30 +511,36 @@ def evaluate_batch(
 
         # Create evaluator and run
         evaluator = Evaluator(prompts_dir=prompts_dir)
-        results = asyncio.run(
-            evaluator.evaluate_batch(
-                rubrics=rubric_list.rubrics,
-                sessions=sessions,
-                rubrics_version=rubric_list.version,
+        
+        with get_usage_metadata_callback() as cb:
+            results = asyncio.run(
+                evaluator.evaluate_batch(
+                    rubrics=rubric_list.rubrics,
+                    sessions=sessions,
+                    rubrics_version=rubric_list.version,
+                )
             )
-        )
 
-        # Save results
-        rubric_names = {r.id: r.name for r in rubric_list.rubrics}
-        summary_path = evaluator.save_batch_results(results, output_dir, rubric_names)
+            # Save results
+            rubric_names = {r.id: r.name for r in rubric_list.rubrics}
+            summary_path = evaluator.save_batch_results(results, output_dir, rubric_names)
 
-        click.echo(f"\nBatch evaluation complete!")
-        click.echo(f"Results saved to: {output_dir}")
-        click.echo(f"Summary: {summary_path}")
+            click.echo(f"\nBatch evaluation complete!")
+            click.echo(f"Results saved to: {output_dir}")
+            click.echo(f"Summary: {summary_path}")
 
-        # Display summary statistics
-        from .models.evaluation import BatchEvaluationSummary
+            # Display summary statistics
+            from .models.evaluation import BatchEvaluationSummary
 
-        summary = BatchEvaluationSummary.from_results(results, rubric_names)
-        click.echo(f"\nBatch Summary:")
-        click.echo(f"  Sessions evaluated: {summary.total_sessions}")
-        click.echo(f"  Average score: {summary.average_score}")
-        click.echo(f"  Median score: {summary.median_score}")
+            summary = BatchEvaluationSummary.from_results(results, rubric_names)
+            click.echo(f"\nBatch Summary:")
+            click.echo(f"  Sessions evaluated: {summary.total_sessions}")
+            click.echo(f"  Average score: {summary.average_score}")
+            click.echo(f"  Median score: {summary.median_score}")
+
+            # Display token usage
+            if cb.usage_metadata:
+                format_token_usage(cb.usage_metadata)
 
     except Exception as e:
         click.echo(f"Error during batch evaluation: {e}", err=True)
@@ -538,46 +668,51 @@ def validate(
         click.echo(f"Loaded {len(rubric_list.rubrics)} rubrics")
 
         # Run validation
-        report = asyncio.run(validator.validate(max_sessions=max_sessions))
+        with get_usage_metadata_callback() as cb:
+            report = asyncio.run(validator.validate(max_sessions=max_sessions))
 
-        if report.total_sessions == 0:
-            click.echo(
-                f"Warning: No sessions found with score '{score_name}'. "
-                "Check your dataset manifest.",
-                err=True,
-            )
-            sys.exit(1)
-
-        # Save report
-        validator.save_report(report, output)
-        click.echo(f"Saved validation report to: {output}")
-
-        # Display summary
-        click.echo(f"\nValidation Summary:")
-        click.echo(f"  Sessions validated: {report.total_sessions}")
-        click.echo(f"  Score type: {report.score_name}")
-
-        click.echo(f"\nMetrics:")
-        click.echo(f"  Mean Absolute Error (MAE): {report.metrics.mean_absolute_error}")
-        click.echo(f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}")
-        click.echo(f"  Mean Error (bias): {report.metrics.mean_error}")
-        if report.metrics.correlation is not None:
-            click.echo(f"  Correlation: {report.metrics.correlation}")
-        if report.metrics.r_squared is not None:
-            click.echo(f"  R-squared: {report.metrics.r_squared}")
-
-        click.echo(f"\nError Range:")
-        click.echo(f"  Min error: {report.metrics.min_error}")
-        click.echo(f"  Max error: {report.metrics.max_error}")
-
-        # Show per-session summary if verbose or few sessions
-        if ctx.obj.get("verbose") or report.total_sessions <= 10:
-            click.echo(f"\nPer-Session Results:")
-            for result in report.session_results:
+            if report.total_sessions == 0:
                 click.echo(
-                    f"  - {result.file}: predicted={result.predicted_score}, "
-                    f"real={result.real_score}, error={result.error:+.4f}"
+                    f"Warning: No sessions found with score '{score_name}'. "
+                    "Check your dataset manifest.",
+                    err=True,
                 )
+                sys.exit(1)
+
+            # Save report
+            validator.save_report(report, output)
+            click.echo(f"Saved validation report to: {output}")
+
+            # Display summary
+            click.echo(f"\nValidation Summary:")
+            click.echo(f"  Sessions validated: {report.total_sessions}")
+            click.echo(f"  Score type: {report.score_name}")
+
+            click.echo(f"\nMetrics:")
+            click.echo(f"  Mean Absolute Error (MAE): {report.metrics.mean_absolute_error}")
+            click.echo(f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}")
+            click.echo(f"  Mean Error (bias): {report.metrics.mean_error}")
+            if report.metrics.correlation is not None:
+                click.echo(f"  Correlation: {report.metrics.correlation}")
+            if report.metrics.r_squared is not None:
+                click.echo(f"  R-squared: {report.metrics.r_squared}")
+
+            click.echo(f"\nError Range:")
+            click.echo(f"  Min error: {report.metrics.min_error}")
+            click.echo(f"  Max error: {report.metrics.max_error}")
+
+            # Show per-session summary if verbose or few sessions
+            if ctx.obj.get("verbose") or report.total_sessions <= 10:
+                click.echo(f"\nPer-Session Results:")
+                for result in report.session_results:
+                    click.echo(
+                        f"  - {result.file}: predicted={result.predicted_score}, "
+                        f"real={result.real_score}, error={result.error:+.4f}"
+                    )
+
+            # Display token usage
+            if cb.usage_metadata:
+                format_token_usage(cb.usage_metadata)
 
     except Exception as e:
         click.echo(f"Error during validation: {e}", err=True)
