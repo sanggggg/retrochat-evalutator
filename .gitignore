@@ -64,3 +64,4 @@ Thumbs.db
 # dataset
 input/**/*
 dataset.json
+config.yaml
