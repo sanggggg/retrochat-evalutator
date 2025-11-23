@@ -108,7 +108,9 @@ class DatasetLoader:
         return qualified
 
     def load_session(self, session_info: SessionInfo) -> ChatSession:
-        """Parse JSONL file into ChatSession model.
+        """Parse session file into ChatSession model.
+
+        Supports both JSON (.json) and JSONL (.jsonl) formats.
 
         Args:
             session_info: Session info from manifest.
@@ -118,7 +120,11 @@ class DatasetLoader:
         """
         session_path = self.dataset_dir / session_info.file
         logger.debug(f"Loading session from {session_path}")
-        return ChatSession.from_jsonl(session_path)
+
+        if session_path.suffix == ".json":
+            return ChatSession.from_json(session_path)
+        else:
+            return ChatSession.from_jsonl(session_path)
 
     def load_sessions(
         self,

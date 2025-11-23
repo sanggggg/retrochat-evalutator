@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 
 from retrochat_evaluator.models.rubric import Rubric, RubricList, TrainingConfig
-from retrochat_evaluator.models.chat_session import ChatSession, ChatMessage, ToolCall
+from retrochat_evaluator.models.chat_session import ChatSession, Turn
 from retrochat_evaluator.models.evaluation import (
     RubricScore,
     EvaluationResult,
@@ -93,12 +93,12 @@ class TestChatSession:
     def test_chat_session_creation(self, sample_chat_session: ChatSession):
         """Test ChatSession creation."""
         assert sample_chat_session.session_id == "test-session-001"
-        assert len(sample_chat_session.messages) == 4
-        assert sample_chat_session.git_branch == "main"
+        assert len(sample_chat_session.turns) == 8
+        assert sample_chat_session.total_turns == 2
 
     def test_chat_session_turn_count(self, sample_chat_session: ChatSession):
         """Test turn count calculation."""
-        # 2 user messages = 2 turns
+        # max turn_number = 2
         assert sample_chat_session.turn_count == 2
 
     def test_chat_session_from_jsonl(self, mock_session_path: Path):
@@ -106,58 +106,78 @@ class TestChatSession:
         session = ChatSession.from_jsonl(mock_session_path)
 
         assert session.session_id == "test-session-001"
-        assert session.cwd == "/Users/test/project"
-        assert session.git_branch == "main"
-        assert len(session.messages) > 0
+        assert len(session.turns) > 0
+
+    def test_chat_session_from_json(self, tmp_path: Path):
+        """Test parsing ChatSession from JSON."""
+        json_data = {
+            "session_id": "test-json-001",
+            "total_turns": 1,
+            "turns": [
+                {
+                    "turn_number": 1,
+                    "role": "user",
+                    "message_type": "simple_message",
+                    "content": "Hello world",
+                }
+            ],
+        }
+        json_path = tmp_path / "test_session.json"
+        with open(json_path, "w") as f:
+            json.dump(json_data, f)
+
+        session = ChatSession.from_json(json_path)
+        assert session.session_id == "test-json-001"
+        assert session.total_turns == 1
+        assert len(session.turns) == 1
+        assert session.turns[0].content == "Hello world"
 
     def test_chat_session_format_for_prompt(self, sample_chat_session: ChatSession):
-        """Test formatting session for prompt."""
+        """Test formatting session for prompt (now returns JSON)."""
         formatted = sample_chat_session.format_for_prompt()
 
-        assert "=== Chat Session ===" in formatted
-        assert "test-session-001" in formatted
-        assert "[USER]" in formatted
-        assert "[ASSISTANT]" in formatted
-        assert "Turn 1" in formatted
-        assert "=== End Session ===" in formatted
+        # format_for_prompt now returns JSON
+        parsed = json.loads(formatted)
+        assert parsed["session_id"] == "test-session-001"
+        assert "turns" in parsed
+        assert len(parsed["turns"]) == 8
 
 
-class TestToolCall:
-    """Tests for ToolCall model."""
+class TestTurn:
+    """Tests for Turn model."""
 
-    def test_tool_call_creation(self):
-        """Test ToolCall creation."""
-        tool_call = ToolCall(
-            tool_id="toolu_001",
-            tool_name="Read",
-            tool_input={"file_path": "/test/file.py"},
-            tool_result="file contents",
+    def test_turn_creation(self):
+        """Test Turn creation."""
+        turn = Turn(
+            turn_number=1,
+            role="user",
+            message_type="simple_message",
+            content="Hello world",
         )
-        assert tool_call.tool_name == "Read"
+        assert turn.role == "user"
+        assert turn.message_type == "simple_message"
 
-    def test_tool_call_format_for_prompt(self):
-        """Test ToolCall formatting."""
-        tool_call = ToolCall(
-            tool_id="toolu_001",
-            tool_name="Read",
-            tool_input={"file_path": "/test/file.py"},
-            tool_result="file contents",
+    def test_turn_tool_request(self):
+        """Test Turn with tool_request message type."""
+        turn = Turn(
+            turn_number=1,
+            role="assistant",
+            message_type="tool_request(Read)",
+            content="file_path: /test/file.py",
         )
-        formatted = tool_call.format_for_prompt()
-        assert "Read" in formatted
-        assert "/test/file.py" in formatted
+        assert turn.message_type == "tool_request(Read)"
+        assert "/test/file.py" in turn.content
 
-    def test_tool_call_truncates_long_results(self):
-        """Test that long tool results are truncated."""
-        long_result = "x" * 1000
-        tool_call = ToolCall(
-            tool_id="toolu_001",
-            tool_name="Read",
-            tool_input={"file_path": "/test/file.py"},
-            tool_result=long_result,
+    def test_turn_tool_result(self):
+        """Test Turn with tool_result message type."""
+        turn = Turn(
+            turn_number=1,
+            role="user",
+            message_type="tool_result(Read)",
+            content="file contents here",
         )
-        formatted = tool_call.format_for_prompt(max_result_length=100)
-        assert "truncated" in formatted
+        assert turn.message_type == "tool_result(Read)"
+        assert turn.role == "user"
 
 
 class TestRubricScore:

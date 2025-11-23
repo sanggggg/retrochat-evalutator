@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from retrochat_evaluator.models.rubric import Rubric, RubricList
-from retrochat_evaluator.models.chat_session import ChatSession, ChatMessage, ToolCall
+from retrochat_evaluator.models.chat_session import ChatSession, Turn
 from retrochat_evaluator.models.evaluation import RubricScore, EvaluationResult
 from retrochat_evaluator.llm.gemini import GeminiClient
 from retrochat_evaluator.config import LLMConfig
@@ -97,51 +97,57 @@ def sample_chat_session() -> ChatSession:
     """Create a sample ChatSession for testing."""
     return ChatSession(
         session_id="test-session-001",
-        messages=[
-            ChatMessage(
+        total_turns=2,
+        turns=[
+            Turn(
+                turn_number=1,
                 role="user",
+                message_type="simple_message",
                 content="Please add a function to calculate the sum of two numbers",
-                timestamp=datetime(2025, 11, 6, 10, 0, 0),
             ),
-            ChatMessage(
+            Turn(
+                turn_number=1,
                 role="assistant",
+                message_type="simple_message",
                 content="I'll help you create that function.",
-                tool_calls=[
-                    ToolCall(
-                        tool_id="toolu_001",
-                        tool_name="Read",
-                        tool_input={"file_path": "/test/math.py"},
-                        tool_result="def multiply(a, b):\n    return a * b",
-                    )
-                ],
-                timestamp=datetime(2025, 11, 6, 10, 0, 5),
             ),
-            ChatMessage(
+            Turn(
+                turn_number=1,
                 role="assistant",
-                content="Done! I've added the calculate_sum function.",
-                tool_calls=[
-                    ToolCall(
-                        tool_id="toolu_002",
-                        tool_name="Edit",
-                        tool_input={
-                            "file_path": "/test/math.py",
-                            "old_string": "...",
-                            "new_string": "...",
-                        },
-                        tool_result="File edited successfully",
-                    )
-                ],
-                timestamp=datetime(2025, 11, 6, 10, 0, 10),
+                message_type="tool_request(Read)",
+                content="file_path: /test/math.py",
             ),
-            ChatMessage(
+            Turn(
+                turn_number=1,
                 role="user",
+                message_type="tool_result(Read)",
+                content="def multiply(a, b):\n    return a * b",
+            ),
+            Turn(
+                turn_number=1,
+                role="assistant",
+                message_type="simple_message",
+                content="Done! I've added the calculate_sum function.",
+            ),
+            Turn(
+                turn_number=1,
+                role="assistant",
+                message_type="tool_request(Edit)",
+                content="file_path: /test/math.py\nold_string: ...\nnew_string: ...",
+            ),
+            Turn(
+                turn_number=1,
+                role="user",
+                message_type="tool_result(Edit)",
+                content="File edited successfully",
+            ),
+            Turn(
+                turn_number=2,
+                role="user",
+                message_type="simple_message",
                 content="Perfect, thanks!",
-                timestamp=datetime(2025, 11, 6, 10, 0, 15),
             ),
         ],
-        cwd="/Users/test/project",
-        git_branch="main",
-        start_timestamp=datetime(2025, 11, 6, 10, 0, 0),
     )
 
 
