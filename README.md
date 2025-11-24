@@ -37,11 +37,11 @@ cp .env.example .env
 uv run retrochat-eval train \
     --dataset-dir ./raw-data \
     --dataset-manifest ./dataset.json \
-    --output ./rubrics.json
+    --output ./output
 
 # Evaluate a chat session
 uv run retrochat-eval evaluate \
-    --rubrics ./rubrics.json \
+    --rubrics ./output/train-result-YYYY-MM-DD-HHMMSS/rubrics.json \
     --session ./session.jsonl \
     --output ./result.json
 ```
@@ -57,8 +57,20 @@ retrochat-evaluator/
 │   └── llm/                   # Gemini client
 ├── prompts/                   # Prompt templates
 ├── raw-data/                  # Example chat sessions
+├── output/                    # Training results (gitignored)
+│   └── train-result-YYYY-MM-DD-HHMMSS/
+│       ├── rubrics.json       # Final consolidated rubrics
+│       ├── metadata.json      # Training config and metadata
+│       └── raw-rubrics.json    # Session-to-rubrics mapping
 └── docs/                      # Documentation
 ```
+
+## Training Output Structure
+
+Each training run creates a timestamped folder under `output/`:
+- `rubrics.json`: Final consolidated rubrics (for validation/evaluation)
+- `metadata.json`: Training configuration, LLM settings, and metadata (evaluations can be added later)
+- `raw-rubrics.json`: Mapping of session IDs to their extracted rubrics (before consolidation)
 
 ## License
 

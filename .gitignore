@@ -54,6 +54,9 @@ htmlcov/
 rubrics.json
 result*.json
 
+# Training output directory
+output/
+
 # Jupyter
 .ipynb_checkpoints/
 

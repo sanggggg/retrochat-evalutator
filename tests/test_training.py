@@ -246,15 +246,16 @@ class TestTrainer:
         trainer._extraction_llm_client = mock_client
         trainer._summarization_llm_client = mock_client
 
-        rubric_list = await trainer.train()
+        rubric_list, raw_rubrics_map, _ = await trainer.train()
 
         assert rubric_list is not None
         assert len(rubric_list.rubrics) == 2
         assert rubric_list.training_config is not None
         assert rubric_list.training_config.sessions_used == 2
+        assert isinstance(raw_rubrics_map, dict)
 
     def test_save_rubrics(self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list):
-        """Test saving rubrics to file."""
+        """Test saving rubrics to folder structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             prompts_dir = Path(tmpdir) / "prompts"
             prompts_dir.mkdir()
@@ -267,10 +268,14 @@ class TestTrainer:
                 prompts_dir=prompts_dir,
             )
 
-            output_path = Path(tmpdir) / "rubrics.json"
-            trainer.save_rubrics(sample_rubric_list, output_path)
+            output_dir = Path(tmpdir) / "output"
+            raw_rubrics_map = {"session1": sample_rubric_list.rubrics[:1], "session2": sample_rubric_list.rubrics[1:]}
+            result_folder = trainer.save_rubrics(sample_rubric_list, output_dir, raw_rubrics_map)
 
-            assert output_path.exists()
+            assert result_folder.exists()
+            assert (result_folder / "rubrics.json").exists()
+            assert (result_folder / "metadata.json").exists()
+            assert (result_folder / "raw-rubrics.json").exists()
 
 
 class TestSemanticClusteringSummarizer:
@@ -619,10 +624,11 @@ class TestTrainerWithSemanticClustering:
             "retrochat_evaluator.training.semantic_summarizer.SemanticClusteringSummarizer._generate_embeddings",
             new=AsyncMock(return_value=mock_embeddings),
         ):
-            rubric_list = await trainer.train()
+            rubric_list, raw_rubrics_map, _ = await trainer.train()
 
         assert rubric_list is not None
         assert len(rubric_list.rubrics) >= 1
         assert rubric_list.training_config is not None
+        assert isinstance(raw_rubrics_map, dict)
         # Semantic clustering should have been called (2 extractions, no summarization LLM call)
         assert mock_client.generate.call_count == 2

@@ -1,16 +1,19 @@
 """Training orchestrator for the complete training pipeline."""
 
+import json
 import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
 from ..models.rubric import Rubric, RubricList, TrainingConfig as RubricTrainingConfig
+from ..models.chat_session import ChatSession
 from ..config import (
     TrainingConfig,
     ExtractionLLMConfig,
     SummarizationLLMConfig,
     SummarizationMethod,
+    Config,
 )
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
@@ -32,6 +35,7 @@ class Trainer:
         config: Optional[TrainingConfig] = None,
         extraction_llm_config: Optional[ExtractionLLMConfig] = None,
         summarization_llm_config: Optional[SummarizationLLMConfig] = None,
+        full_config: Optional[Config] = None,
     ):
         """Initialize trainer.
 
@@ -42,10 +46,12 @@ class Trainer:
             config: Training configuration.
             extraction_llm_config: LLM configuration for rubric extraction.
             summarization_llm_config: LLM configuration for rubric summarization.
+            full_config: Full configuration object for metadata (optional).
         """
         self.config = config or TrainingConfig()
         self.extraction_llm_config = extraction_llm_config or ExtractionLLMConfig()
         self.summarization_llm_config = summarization_llm_config or SummarizationLLMConfig()
+        self.full_config = full_config
         self.prompts_dir = Path(prompts_dir)
 
         # Initialize components
@@ -112,11 +118,13 @@ class Trainer:
             )
         return self._semantic_summarizer
 
-    async def train(self) -> RubricList:
+    async def train(self) -> tuple[RubricList, dict[str, list[Rubric]], list[ChatSession]]:
         """Execute full training pipeline.
 
         Returns:
-            RubricList containing the final consolidated rubrics.
+            Tuple of (RubricList containing the final consolidated rubrics,
+                     dict mapping session_id to list of extracted rubrics,
+                     list of ChatSession objects used for training).
         """
         logger.info("Starting training pipeline")
 
@@ -131,7 +139,7 @@ class Trainer:
 
         if not qualified_sessions:
             logger.warning("No sessions passed the score threshold")
-            return RubricList(rubrics=[])
+            return RubricList(rubrics=[]), {}, []
 
         # 2. Load chat content for each session
         logger.info("Loading chat sessions")
@@ -162,7 +170,13 @@ class Trainer:
         non_empty_lists = [r for r in rubric_lists if r]
         if not non_empty_lists:
             logger.warning("No rubrics extracted from any session")
-            return RubricList(rubrics=[])
+            return RubricList(rubrics=[]), {}, chat_sessions
+
+        # Create mapping of session_id to rubrics
+        raw_rubrics_map: dict[str, list[Rubric]] = {}
+        for session, rubric_list in zip(chat_sessions, rubric_lists):
+            if rubric_list:  # Only include non-empty lists
+                raw_rubrics_map[session.session_id] = rubric_list
 
         # 4. Summarize into final rubrics
         logger.info(f"Consolidating rubrics using method: {self.config.summarization_method.value}")
@@ -186,14 +200,118 @@ class Trainer:
         )
 
         logger.info(f"Training complete. Generated {len(final_rubrics)} rubrics")
-        return rubric_list
+        return rubric_list, raw_rubrics_map, chat_sessions
 
-    def save_rubrics(self, rubrics: RubricList, output_path: Path) -> None:
-        """Save rubrics to JSON file.
+    def save_rubrics(
+        self,
+        rubrics: RubricList,
+        output_path: Path,
+        raw_rubrics_map: Optional[dict[str, list[Rubric]]] = None,
+    ) -> Path:
+        """Save rubrics to organized folder structure.
+
+        Creates a folder structure:
+        - output_path/train-result-YYYY-MM-DD-HHMMSS/
+          - rubrics.json (final consolidated rubrics)
+          - metadata.json (training config and metadata)
+          - raw-rubrics.json (session-to-rubrics mapping)
 
         Args:
             rubrics: RubricList to save.
-            output_path: Path for output JSON file.
+            output_path: Base output directory (will create subfolder).
+            raw_rubrics_map: Optional mapping of session_id to extracted rubrics.
+
+        Returns:
+            Path to the created training result folder.
         """
-        rubrics.to_json(output_path)
-        logger.info(f"Saved rubrics to {output_path}")
+        # Check if output_path exists and is a file (not a directory)
+        if output_path.exists() and output_path.is_file():
+            raise ValueError(
+                f"Output path '{output_path}' exists as a file. "
+                "Please remove it or specify a different directory path."
+            )
+        
+        # Create output directory if it doesn't exist
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Create timestamped folder
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        result_folder = output_path / f"train-result-{timestamp}"
+        result_folder.mkdir(parents=True, exist_ok=True)
+
+        # 1. Save rubrics.json
+        rubrics_path = result_folder / "rubrics.json"
+        rubrics.to_json(rubrics_path)
+        logger.info(f"Saved rubrics to {rubrics_path}")
+
+        # 2. Save metadata.json
+        metadata = {
+            "created_at": rubrics.created_at.isoformat(),
+            "version": rubrics.version,
+            "training_config": {
+                "score_threshold": self.config.score_threshold,
+                "score_name": self.config.score_name,
+                "sessions_used": rubrics.training_config.sessions_used if rubrics.training_config else 0,
+                "total_sessions": rubrics.training_config.total_sessions if rubrics.training_config else 0,
+                "max_sessions": self.config.max_sessions,
+                "sample_size": self.config.sample_size,
+                "summarization_method": self.config.summarization_method.value,
+                "min_rubrics": self.config.min_rubrics,
+                "max_rubrics": self.config.max_rubrics,
+                "extraction_min_rubrics": self.config.extraction_min_rubrics,
+                "extraction_max_rubrics": self.config.extraction_max_rubrics,
+                "max_concurrent_extractions": self.config.max_concurrent_extractions,
+            },
+            "llm_config": {
+                "extraction": {
+                    "model_name": self.extraction_llm_config.model_name,
+                    "temperature": self.extraction_llm_config.temperature,
+                    "max_tokens": self.extraction_llm_config.max_tokens,
+                },
+                "summarization": {
+                    "model_name": self.summarization_llm_config.model_name,
+                    "temperature": self.summarization_llm_config.temperature,
+                    "max_tokens": self.summarization_llm_config.max_tokens,
+                },
+            },
+            "consolidation_notes": rubrics.consolidation_notes,
+            "evaluations": [],  # Will be populated later when evaluations are run
+        }
+
+        # Add semantic clustering config if used
+        if self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING:
+            metadata["training_config"]["embedding_model"] = self.config.embedding_model
+            metadata["training_config"]["similarity_threshold"] = self.config.similarity_threshold
+
+        # Add full config paths if available
+        if self.full_config:
+            if self.full_config.dataset_dir:
+                metadata["dataset_dir"] = str(self.full_config.dataset_dir)
+            if self.full_config.dataset_manifest:
+                metadata["dataset_manifest"] = str(self.full_config.dataset_manifest)
+
+        metadata_path = result_folder / "metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        logger.info(f"Saved metadata to {metadata_path}")
+
+        # 3. Save raw-rubrics.json
+        if raw_rubrics_map:
+            raw_rubrics_data = {}
+            for session_id, rubric_list in raw_rubrics_map.items():
+                raw_rubrics_data[session_id] = [
+                    rubric.model_dump(mode="json") for rubric in rubric_list
+                ]
+
+            raw_rubrics_path = result_folder / "raw-rubrics.json"
+            with open(raw_rubrics_path, "w", encoding="utf-8") as f:
+                json.dump(raw_rubrics_data, f, indent=2, ensure_ascii=False)
+            logger.info(f"Saved raw rubrics to {raw_rubrics_path}")
+        else:
+            # Create empty file if no raw rubrics provided
+            raw_rubrics_path = result_folder / "raw-rubrics.json"
+            with open(raw_rubrics_path, "w", encoding="utf-8") as f:
+                json.dump({}, f, indent=2, ensure_ascii=False)
+            logger.info(f"Created empty raw-rubrics.json at {raw_rubrics_path}")
+
+        return result_folder

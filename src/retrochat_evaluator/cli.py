@@ -191,7 +191,7 @@ def main(ctx: click.Context, verbose: bool) -> None:
     "-o",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output path for generated rubrics (default: rubrics.json)",
+    help="Output directory for training results (default: ./output)",
 )
 @click.option(
     "--prompts-dir",
@@ -292,7 +292,16 @@ def train(
     # Resolve paths (CLI overrides config)
     dataset_dir = dataset_dir or cfg.dataset_dir
     dataset_manifest = dataset_manifest or cfg.dataset_manifest
-    output = output or cfg.output_path or Path("rubrics.json")
+    # Default output to ./output directory
+    if output is None:
+        if cfg.output_path:
+            # If config has output_path, check if it's a file or directory
+            if cfg.output_path.suffix == ".json":
+                output = cfg.output_path.parent / "output"
+            else:
+                output = cfg.output_path
+        else:
+            output = Path("output")
     prompts_dir = prompts_dir or cfg.prompts_dir
 
     # Validate required paths
@@ -315,19 +324,27 @@ def train(
         config=training_config,
         extraction_llm_config=cfg.extraction_llm,
         summarization_llm_config=cfg.summarization_llm,
+        full_config=cfg,
     )
 
     try:
         with get_usage_metadata_callback() as cb:
-            rubrics = asyncio.run(trainer.train())
+            rubrics, raw_rubrics_map, _ = asyncio.run(trainer.train())
 
             if not rubrics.rubrics:
                 click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
                 sys.exit(1)
 
-            trainer.save_rubrics(rubrics, output)
+            # Ensure output is a directory (default to ./output)
+            if output is None:
+                output = Path("output")
+            elif output.suffix == ".json":
+                # If user provided a .json file, use its parent directory
+                output = output.parent / "output"
+            
+            result_folder = trainer.save_rubrics(rubrics, output, raw_rubrics_map)
             click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
-            click.echo(f"Saved to: {output}")
+            click.echo(f"Saved to: {result_folder}")
 
             # Display rubric summary
             click.echo("\nGenerated Rubrics:")
