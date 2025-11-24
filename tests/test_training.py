@@ -564,7 +564,7 @@ class TestSemanticClusteringSummarizer:
 
         assert "Input:" in notes
         assert "Output:" in notes
-        assert "Hierarchical Agglomerative" in notes
+        assert "DBSCAN" in notes
         assert "text-embedding-004" in notes
 
 

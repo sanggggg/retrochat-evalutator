@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
 
 from ..models.rubric import Rubric
@@ -19,7 +19,7 @@ class SemanticClusteringSummarizer:
 
     This approach uses:
     1. Text embedding via Google AI (text-embedding-004) to convert rubrics to vectors
-    2. Hierarchical Agglomerative Clustering (HAC) to group similar rubrics
+    2. DBSCAN (Density-Based Spatial Clustering) to group similar rubrics
     3. Cluster size as frequency metric
     4. Centroid-based representative selection
     """
@@ -30,6 +30,7 @@ class SemanticClusteringSummarizer:
         similarity_threshold: float = 0.75,
         min_rubrics: int = 5,
         max_rubrics: int = 10,
+        min_samples: int = 2,
         api_key: Optional[str] = None,
     ):
         """Initialize semantic clustering summarizer.
@@ -37,15 +38,17 @@ class SemanticClusteringSummarizer:
         Args:
             embedding_model: Google AI embedding model name.
             similarity_threshold: Cosine similarity threshold for clustering (0-1).
-                Higher values create more clusters (stricter grouping).
+                Converted to eps (distance) for DBSCAN: eps = 1 - similarity_threshold.
             min_rubrics: Minimum number of rubrics to output.
             max_rubrics: Maximum number of rubrics to output.
+            min_samples: Minimum samples in a neighborhood for DBSCAN core points.
             api_key: Google API key. If not provided, uses GOOGLE_API_KEY env var.
         """
         self.embedding_model = embedding_model
         self.similarity_threshold = similarity_threshold
         self.min_rubrics = min_rubrics
         self.max_rubrics = max_rubrics
+        self.min_samples = min_samples
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self._embeddings: Optional[GoogleGenerativeAIEmbeddings] = None
 
@@ -143,32 +146,39 @@ class SemanticClusteringSummarizer:
         return np.array(embeddings)
 
     def _cluster_embeddings(self, embeddings: np.ndarray) -> np.ndarray:
-        """Cluster embeddings using Hierarchical Agglomerative Clustering.
+        """Cluster embeddings using DBSCAN.
 
         Uses cosine distance (1 - similarity) as the metric.
         """
         n_samples = len(embeddings)
 
-        # Convert similarity threshold to distance threshold
+        # Convert similarity threshold to eps (distance threshold)
         # distance = 1 - cosine_similarity
-        distance_threshold = 1 - self.similarity_threshold
+        eps = 1 - self.similarity_threshold
 
         logger.info(
-            f"Clustering with distance_threshold={distance_threshold:.3f} "
-            f"(similarity_threshold={self.similarity_threshold:.3f})"
+            f"Clustering with DBSCAN eps={eps:.3f} "
+            f"(similarity_threshold={self.similarity_threshold:.3f}), "
+            f"min_samples={self.min_samples}"
         )
 
-        # Use HAC with average linkage and distance threshold
-        clustering = AgglomerativeClustering(
-            n_clusters=None,
-            distance_threshold=distance_threshold,
+        # Use DBSCAN with cosine metric
+        clustering = DBSCAN(
+            eps=eps,
+            min_samples=self.min_samples,
             metric="cosine",
-            linkage="average",
         )
 
         clusters = clustering.fit_predict(embeddings)
-        n_clusters = len(set(clusters))
-        logger.info(f"Found {n_clusters} clusters from {n_samples} rubrics")
+
+        # Count clusters (excluding noise points labeled as -1)
+        unique_clusters = set(clusters)
+        n_clusters = len([c for c in unique_clusters if c >= 0])
+        n_noise = np.sum(clusters == -1)
+
+        logger.info(
+            f"Found {n_clusters} clusters and {n_noise} noise points from {n_samples} rubrics"
+        )
 
         return clusters
 
@@ -186,11 +196,30 @@ class SemanticClusteringSummarizer:
             - indices: list of rubric indices in cluster
             - centroid: mean embedding of cluster
             - representative_idx: index of rubric closest to centroid
+
+        Note: DBSCAN noise points (cluster_id == -1) are treated as individual clusters.
         """
         cluster_info = {}
         unique_clusters = set(clusters)
 
+        # Assign new cluster IDs to noise points (-1)
+        # Each noise point becomes its own cluster
+        max_cluster_id = max(c for c in unique_clusters if c >= 0) if any(c >= 0 for c in unique_clusters) else -1
+        noise_indices = np.where(clusters == -1)[0]
+        for i, noise_idx in enumerate(noise_indices):
+            new_cluster_id = max_cluster_id + 1 + i
+            cluster_info[new_cluster_id] = {
+                "size": 1,
+                "indices": [noise_idx],
+                "centroid": embeddings[noise_idx],
+                "representative_idx": noise_idx,
+                "max_similarity": 1.0,
+            }
+
         for cluster_id in unique_clusters:
+            # Skip noise points (already handled above)
+            if cluster_id == -1:
+                continue
             # Get indices of rubrics in this cluster
             indices = np.where(clusters == cluster_id)[0].tolist()
 
@@ -301,8 +330,9 @@ class SemanticClusteringSummarizer:
             f"Semantic clustering consolidation:",
             f"- Input: {total_input} rubrics from extraction",
             f"- Output: {total_output} clustered rubrics",
-            f"- Clustering method: Hierarchical Agglomerative (HAC)",
-            f"- Similarity threshold: {self.similarity_threshold}",
+            f"- Clustering method: DBSCAN",
+            f"- Similarity threshold (eps): {self.similarity_threshold}",
+            f"- Min samples: {self.min_samples}",
             f"- Embedding model: {self.embedding_model}",
             f"- Total clusters found: {len(cluster_info)}",
             f"- Selected cluster sizes: {cluster_sizes}",

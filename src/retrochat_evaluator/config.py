@@ -47,7 +47,7 @@ class LLMConfig:
 class ExtractionLLMConfig(LLMConfig):
     """LLM configuration for rubric extraction."""
 
-    model_name: str = "gemini-2.5-pro-preview-06-05"
+    model_name: str = "dummy"
     temperature: float = 0.3
     max_tokens: int = 4096
 
@@ -56,7 +56,7 @@ class ExtractionLLMConfig(LLMConfig):
 class SummarizationLLMConfig(LLMConfig):
     """LLM configuration for rubric summarization."""
 
-    model_name: str = "gemini-2.5-pro-preview-06-05"
+    model_name: str = "dummy"
     temperature: float = 0.3
     max_tokens: int = 8192
 
@@ -65,7 +65,7 @@ class SummarizationLLMConfig(LLMConfig):
 class EvaluationLLMConfig(LLMConfig):
     """LLM configuration for evaluation/scoring."""
 
-    model_name: str = "gemini-2.5-pro-preview-06-05"
+    model_name: str = "dummy"
     temperature: float = 0.1
     max_tokens: int = 1024
 

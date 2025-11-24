@@ -7,6 +7,37 @@ import json
 from pydantic import BaseModel, Field
 
 
+# Default truncation settings
+DEFAULT_MAX_CONTENT_LENGTH = 2000
+DEFAULT_KEEP_LENGTH = 1000
+
+
+def truncate_content(
+    content: str,
+    max_length: int = DEFAULT_MAX_CONTENT_LENGTH,
+    keep_length: int = DEFAULT_KEEP_LENGTH,
+) -> str:
+    """Truncate content if it exceeds max_length.
+
+    If content is longer than max_length, keep the first and last keep_length
+    characters and insert <manual_skip/> tag in between.
+
+    Args:
+        content: The content string to potentially truncate.
+        max_length: Maximum allowed length before truncation.
+        keep_length: Number of characters to keep at start and end.
+
+    Returns:
+        Original content if within limit, or truncated content with <manual_skip/> tag.
+    """
+    if len(content) <= max_length:
+        return content
+
+    start = content[:keep_length]
+    end = content[-keep_length:]
+    return f"{start}\n<manual_skip/>\n{end}"
+
+
 class Turn(BaseModel):
     """A single turn in the chat session."""
 
@@ -102,7 +133,7 @@ class ChatSession(BaseModel):
                                                 turn_number=turn_number,
                                                 role="system",
                                                 message_type=f"tool_result({tool_name})",
-                                                content=result_content,
+                                                content=truncate_content(result_content),
                                             )
                                         )
                         continue
@@ -113,7 +144,7 @@ class ChatSession(BaseModel):
                                 turn_number=turn_number,
                                 role="user",
                                 message_type="simple_message",
-                                content=content,
+                                content=truncate_content(content),
                             )
                         )
 
@@ -132,7 +163,7 @@ class ChatSession(BaseModel):
                                         turn_number=turn_number,
                                         role="assistant",
                                         message_type="simple_message",
-                                        content=text,
+                                        content=truncate_content(text),
                                     )
                                 )
                         elif item_type == "thinking":
@@ -143,7 +174,7 @@ class ChatSession(BaseModel):
                                         turn_number=turn_number,
                                         role="assistant",
                                         message_type="thinking",
-                                        content=thinking,
+                                        content=truncate_content(thinking),
                                     )
                                 )
                         elif item_type == "tool_use":
@@ -164,7 +195,7 @@ class ChatSession(BaseModel):
                                     turn_number=turn_number,
                                     role="assistant",
                                     message_type=f"tool_request({tool_name})",
-                                    content=input_str,
+                                    content=truncate_content(input_str),
                                 )
                             )
 
