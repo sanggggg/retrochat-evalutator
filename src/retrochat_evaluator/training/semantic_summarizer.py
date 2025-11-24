@@ -48,6 +48,12 @@ class SemanticClusteringSummarizer:
         self.max_rubrics = max_rubrics
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self._embeddings: Optional[GoogleGenerativeAIEmbeddings] = None
+        
+        # Store clustering results for visualization
+        self.last_embeddings: Optional[np.ndarray] = None
+        self.last_clusters: Optional[np.ndarray] = None
+        self.last_all_rubrics: Optional[list[Rubric]] = None
+        self.last_cluster_info: Optional[dict[int, dict]] = None
 
     def _get_embeddings_client(self) -> GoogleGenerativeAIEmbeddings:
         """Lazy load the Google AI embeddings client."""
@@ -97,6 +103,12 @@ class SemanticClusteringSummarizer:
 
         # Step 4: Select top k clusters and get representatives
         final_rubrics = self._select_representatives(cluster_info, all_rubrics, embeddings)
+
+        # Store clustering results for visualization
+        self.last_embeddings = embeddings
+        self.last_clusters = clusters
+        self.last_all_rubrics = all_rubrics
+        self.last_cluster_info = cluster_info
 
         # Generate consolidation notes
         notes = self._generate_notes(total_rubrics, len(final_rubrics), cluster_info)
