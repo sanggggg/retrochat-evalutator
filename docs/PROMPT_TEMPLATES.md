@@ -2,11 +2,15 @@
 
 This document specifies the prompt templates used in the training and evaluation modules.
 
-## 1. Rubric Extractor Prompt
+## 1. Rubric Extractor Prompts
+
+The system supports multiple rubric extractor prompts based on the score type being used. The appropriate prompt is automatically selected based on the `score_name` configuration.
+
+### 1.1 Default Rubric Extractor
 
 **File**: `prompts/rubric_extractor.txt`
 
-**Purpose**: Extract evaluation rubrics from a high-quality chat session.
+**Purpose**: Extract evaluation rubrics from a high-quality chat session (general/default).
 
 **Template**:
 ```
@@ -42,8 +46,44 @@ Provide your response as a JSON array of rubrics. Each rubric should have:
 ]
 ```
 
-Extract 3-7 rubrics that are specific and actionable.
+Extract {extraction_min_rubrics}-{extraction_max_rubrics} rubrics that are specific and actionable.
 ```
+
+### 1.2 Excellence Rubric Extractor
+
+**File**: `prompts/rubric_extractor_excellence.txt`
+
+**Purpose**: Extract rubrics focused on excellence in accomplishing difficult tasks.
+
+**Use Case**: When `score_name` is "excellence" or similar, this prompt focuses on:
+- How the user leveraged AI capabilities to solve challenging problems
+- How the user effectively communicated complex requirements
+- How the user guided the AI through sophisticated tasks
+- Patterns of effective collaboration on high-value tasks
+
+### 1.3 Token Efficiency Rubric Extractor
+
+**File**: `prompts/rubric_extractor_token_efficiency.txt`
+
+**Purpose**: Extract rubrics focused on token efficiency (code growth per token used).
+
+**Use Case**: When `score_name` is "token_efficiency" or similar, this prompt focuses on:
+- How the user minimized unnecessary back-and-forth
+- How the user provided clear, concise instructions
+- How the user avoided redundant requests
+- Patterns of efficient communication that reduce token waste
+
+### 1.4 User Turn Efficiency Rubric Extractor
+
+**File**: `prompts/rubric_extractor_user_turn_efficiency.txt`
+
+**Purpose**: Extract rubrics focused on user turn efficiency (code growth per user message turn).
+
+**Use Case**: When `score_name` is "user_turn_efficiency" or similar, this prompt focuses on:
+- How the user achieved maximum progress with minimal message exchanges
+- How the user provided comprehensive requirements upfront
+- How the user effectively guided the AI without excessive iteration
+- Patterns of effective communication that minimize back-and-forth exchanges
 
 ---
 
@@ -198,7 +238,9 @@ Total Turns: {turn_count}
 
 | Prompt | Variable | Description |
 |--------|----------|-------------|
-| Extractor | `{chat_session}` | Formatted chat session |
+| Extractor (all variants) | `{chat_session}` | Formatted chat session |
+| Extractor (all variants) | `{extraction_min_rubrics}` | Minimum number of rubrics to extract |
+| Extractor (all variants) | `{extraction_max_rubrics}` | Maximum number of rubrics to extract |
 | Summarizer | `{all_rubrics}` | JSON array of all extracted rubrics |
 | Judge | `{rubric_name}` | Name of rubric being evaluated |
 | Judge | `{rubric_description}` | Full rubric description |

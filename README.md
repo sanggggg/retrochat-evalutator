@@ -11,10 +11,7 @@ This tool evaluates "AI Agent Efficiency of User" by:
 ## Documentation
 
 - [Project Plan](docs/PLAN.md) - Architecture and overview
-- [Training Module](docs/PLAN_TRAINING.md) - Detailed training implementation
-- [Evaluation Module](docs/PLAN_EVALUATION.md) - Detailed evaluation implementation
 - [Prompt Templates](docs/PROMPT_TEMPLATES.md) - LLM prompt specifications
-- [Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md) - Step-by-step guide
 
 ## Tech Stack
 
