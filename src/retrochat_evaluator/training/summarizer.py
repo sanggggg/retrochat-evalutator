@@ -21,6 +21,8 @@ class RubricSummarizer:
         llm_client: GeminiClient,
         prompt_template_path: Path,
         prompts_dir: Optional[Path] = None,
+        min_rubrics: int = 5,
+        max_rubrics: int = 10,
     ):
         """Initialize rubric summarizer.
 
@@ -28,9 +30,13 @@ class RubricSummarizer:
             llm_client: Gemini client for LLM calls.
             prompt_template_path: Path to the summarizer prompt template.
             prompts_dir: Base directory for prompts.
+            min_rubrics: Minimum number of rubrics in final list.
+            max_rubrics: Maximum number of rubrics in final list.
         """
         self.llm = llm_client
         self.prompt_template = load_prompt_template(prompt_template_path, prompts_dir)
+        self.min_rubrics = min_rubrics
+        self.max_rubrics = max_rubrics
 
     async def summarize(self, rubric_lists: list[list[Rubric]]) -> tuple[list[Rubric], str]:
         """Consolidate rubrics into final list.
@@ -42,7 +48,12 @@ class RubricSummarizer:
             Tuple of (final rubrics list, consolidation notes).
         """
         all_rubrics = self._flatten_and_format(rubric_lists)
-        prompt = format_prompt(self.prompt_template, all_rubrics=all_rubrics)
+        prompt = format_prompt(
+            self.prompt_template,
+            all_rubrics=all_rubrics,
+            summarization_min_rubrics=self.min_rubrics,
+            summarization_max_rubrics=self.max_rubrics,
+        )
 
         logger.info(f"Summarizing {sum(len(r) for r in rubric_lists)} rubrics from extraction")
         response = await self.llm.generate(prompt)

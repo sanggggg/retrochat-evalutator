@@ -6,7 +6,7 @@ You have been given rubrics extracted from multiple high-quality chat sessions. 
 {all_rubrics}
 
 ## Task
-Create a final list of 5-10 evaluation rubrics by:
+Create a final list of {summarization_min_rubrics}-{summarization_max_rubrics} evaluation rubrics by:
 1. Identifying common themes across the extracted rubrics
 2. Merging similar or overlapping rubrics
 3. Removing redundant or overly specific rubrics

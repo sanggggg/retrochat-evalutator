@@ -33,14 +33,20 @@ training:
   sample_size: null  # Limit to small sample for testing (e.g., 5). Takes precedence over max_sessions if set.
   max_concurrent_extractions: 5
 
+  # Rubric extraction configuration
+  extraction_min_rubrics: 3
+  extraction_max_rubrics: 7
+
   # Summarization method: "llm" or "semantic_clustering"
   summarization_method: llm
+
+  # Summarization configuration (used for both LLM and semantic_clustering methods)
+  min_rubrics: 5
+  max_rubrics: 10
 
   # Semantic clustering options (used when summarization_method is semantic_clustering)
   embedding_model: models/text-embedding-004
   similarity_threshold: 0.75
-  min_rubrics: 5
-  max_rubrics: 10
 
 # Evaluation Configuration
 evaluation:

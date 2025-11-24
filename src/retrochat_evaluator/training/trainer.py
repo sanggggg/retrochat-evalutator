@@ -84,6 +84,8 @@ class Trainer:
                 llm_client=self._get_extraction_llm_client(),
                 prompt_template_path=Path(prompt_filename),
                 prompts_dir=self.prompts_dir,
+                min_rubrics=self.config.extraction_min_rubrics,
+                max_rubrics=self.config.extraction_max_rubrics,
             )
         return self._extractor
 
@@ -94,6 +96,8 @@ class Trainer:
                 llm_client=self._get_summarization_llm_client(),
                 prompt_template_path=Path("rubric_summarizer.txt"),
                 prompts_dir=self.prompts_dir,
+                min_rubrics=self.config.min_rubrics,
+                max_rubrics=self.config.max_rubrics,
             )
         return self._summarizer
 

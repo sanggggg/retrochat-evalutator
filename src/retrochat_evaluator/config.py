@@ -71,14 +71,20 @@ class TrainingConfig:
     sample_size: Optional[int] = None  # Limit to small sample for testing/debugging
     max_concurrent_extractions: int = 5
 
+    # Rubric extraction configuration
+    extraction_min_rubrics: int = 3
+    extraction_max_rubrics: int = 7
+
     # Summarization method configuration
     summarization_method: SummarizationMethod = SummarizationMethod.LLM
+
+    # Summarization configuration (used for both LLM and semantic_clustering methods)
+    min_rubrics: int = 5
+    max_rubrics: int = 10
 
     # Semantic clustering configuration (used when summarization_method == SEMANTIC_CLUSTERING)
     embedding_model: str = "models/text-embedding-004"
     similarity_threshold: float = 0.75
-    min_rubrics: int = 5
-    max_rubrics: int = 10
 
 
 @dataclass

@@ -23,6 +23,8 @@ class RubricExtractor:
         llm_client: GeminiClient,
         prompt_template_path: Path,
         prompts_dir: Optional[Path] = None,
+        min_rubrics: int = 3,
+        max_rubrics: int = 7,
     ):
         """Initialize rubric extractor.
 
@@ -30,9 +32,13 @@ class RubricExtractor:
             llm_client: Gemini client for LLM calls.
             prompt_template_path: Path to the extractor prompt template.
             prompts_dir: Base directory for prompts.
+            min_rubrics: Minimum number of rubrics to extract.
+            max_rubrics: Maximum number of rubrics to extract.
         """
         self.llm = llm_client
         self.prompt_template = load_prompt_template(prompt_template_path, prompts_dir)
+        self.min_rubrics = min_rubrics
+        self.max_rubrics = max_rubrics
 
     async def extract(self, session: ChatSession) -> list[Rubric]:
         """Extract rubrics from a chat session.
@@ -44,7 +50,12 @@ class RubricExtractor:
             List of extracted Rubric objects.
         """
         formatted_session = session.format_for_prompt()
-        prompt = format_prompt(self.prompt_template, chat_session=formatted_session)
+        prompt = format_prompt(
+            self.prompt_template,
+            chat_session=formatted_session,
+            extraction_min_rubrics=self.min_rubrics,
+            extraction_max_rubrics=self.max_rubrics,
+        )
 
         logger.debug(f"Extracting rubrics from session {session.session_id}")
         response = await self.llm.generate(prompt)

@@ -31,4 +31,4 @@ Provide your response as a JSON array of rubrics. Each rubric should have:
 ]
 ```
 
-Extract 3-7 rubrics that are specific and actionable, focusing on token efficiency patterns.
+Extract {extraction_min_rubrics}-{extraction_max_rubrics} rubrics that are specific and actionable, focusing on token efficiency patterns.
