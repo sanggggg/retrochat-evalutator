@@ -175,11 +175,10 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="Path to dataset manifest JSON file",
 )
 @click.option(
-    "--score-threshold",
-    "-t",
-    type=float,
+    "--score-top-percentile",
+    type=click.FloatRange(0.0, 100.0),
     default=None,
-    help="Minimum score threshold for sessions (default: 4.0)",
+    help="Keep only the top N percentile of sessions by score before training",
 )
 @click.option(
     "--score-name",
@@ -238,7 +237,7 @@ def train(
     config: Path | None,
     dataset_dir: Path | None,
     dataset_manifest: Path | None,
-    score_threshold: float | None,
+    score_top_percentile: float | None,
     score_name: str | None,
     output: Path | None,
     prompts_dir: Path | None,
@@ -258,8 +257,8 @@ def train(
 
     # Override with CLI options (CLI takes precedence)
     training_config = cfg.training
-    if score_threshold is not None:
-        training_config.score_threshold = score_threshold
+    if score_top_percentile is not None:
+        training_config.score_top_percentile = score_top_percentile
     if score_name is not None:
         training_config.score_name = score_name
     # Note: max_sessions and sample_size are no longer supported via CLI.
@@ -296,9 +295,14 @@ def train(
     if not dataset_manifest:
         raise click.UsageError("--dataset-manifest is required (or provide via config)")
 
-    click.echo(
-        f"Starting training with {training_config.score_name} score threshold >= {training_config.score_threshold}"
-    )
+    if training_config.score_top_percentile is not None:
+        filter_desc = (
+            f"top {training_config.score_top_percentile}% {training_config.score_name} scores"
+        )
+    else:
+        filter_desc = "no score filter (all sessions)"
+
+    click.echo(f"Starting training with filter: {filter_desc}")
     click.echo(f"Dataset directory: {dataset_dir}")
     click.echo(f"Manifest: {dataset_manifest}")
     click.echo(f"Summarization method: {training_config.summarization_method.value}")

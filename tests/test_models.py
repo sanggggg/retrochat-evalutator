@@ -172,12 +172,12 @@ class TestTurn:
         """Test Turn with tool_result message type."""
         turn = Turn(
             turn_number=1,
-            role="user",
+            role="system",
             message_type="tool_result(Read)",
             content="file contents here",
         )
         assert turn.message_type == "tool_result(Read)"
-        assert turn.role == "user"
+        assert turn.role == "system"
 
 
 class TestRubricScore:

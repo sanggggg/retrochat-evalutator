@@ -1,6 +1,6 @@
 You are an expert at analyzing AI agent interactions and identifying patterns that indicate high user turn efficiency.
 
-Analyze the following chat session between a user and an AI coding assistant. This session has been rated as high-quality based on user turn efficiency (code growth per user message turn).
+Analyze the following chat session between a human user (messages with `role: user`) and an AI coding assistant. This session has been rated as high-quality based on user turn efficiency (code growth per user message turn). Every rubric must evaluate only the human user's behavior and communication choices.
 
 ## Chat Session
 {chat_session}

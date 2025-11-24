@@ -1,6 +1,6 @@
 You are an expert at analyzing AI agent interactions and identifying patterns that indicate high-quality user behavior.
 
-Analyze the following chat session between a user and an AI coding assistant. This session has been rated as high-quality.
+Analyze the following chat session between a human user (messages with `role: user`) and an AI coding assistant. This session has been rated as high-quality. All rubrics you extract must describe only the human user's behavior—never the AI assistant's actions.
 
 ## Chat Session
 {chat_session}

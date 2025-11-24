@@ -65,7 +65,7 @@ class EvaluationLLMConfig(LLMConfig):
 class TrainingConfig:
     """Configuration for training module."""
 
-    score_threshold: float = 4.0
+    score_top_percentile: float = 10.0
     score_name: str = "default"
     max_concurrent_extractions: int = 5
 

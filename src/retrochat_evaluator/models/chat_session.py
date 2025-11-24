@@ -11,7 +11,9 @@ class Turn(BaseModel):
     """A single turn in the chat session."""
 
     turn_number: int = Field(..., description="Turn number in the conversation")
-    role: Literal["user", "assistant"] = Field(..., description="Role: user or assistant")
+    role: Literal["user", "assistant", "system"] = Field(
+        ..., description="Role: user, assistant, or system"
+    )
     message_type: str = Field(
         ..., description="Message type: simple_message, thinking, tool_request(X), tool_result(X)"
     )
@@ -98,7 +100,7 @@ class ChatSession(BaseModel):
                                         turns.append(
                                             Turn(
                                                 turn_number=turn_number,
-                                                role="user",
+                                                role="system",
                                                 message_type=f"tool_result({tool_name})",
                                                 content=result_content,
                                             )

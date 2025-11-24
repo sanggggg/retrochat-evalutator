@@ -2,9 +2,10 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Optional, Any
+import math
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
 
 from ..models.chat_session import ChatSession
 
@@ -19,6 +20,7 @@ class SessionInfo:
     scores: dict[str, float]
     metadata: dict[str, Any]
     split: Optional[str] = None  # "training" or "validation"
+    score_percentiles: Optional[dict[str, float]] = None
 
     def get_score(self, score_name: str) -> float | None:
         """Get a specific score by name.
@@ -30,6 +32,12 @@ class SessionInfo:
             The score value, or None if not found.
         """
         return self.scores.get(score_name)
+
+    def get_percentile(self, score_name: str) -> float | None:
+        """Get percentile rank (0-100] for the given score if available."""
+        if not self.score_percentiles:
+            return None
+        return self.score_percentiles.get(score_name)
 
 
 @dataclass
@@ -59,6 +67,7 @@ class DatasetManifest:
                     scores=scores_data,
                     metadata=session_data.get("metadata", {}),
                     split=session_data.get("split"),  # "training" or "validation"
+                    score_percentiles=session_data.get("score_percentiles"),
                 )
             )
 
@@ -114,6 +123,44 @@ class DatasetLoader:
         logger.info(
             f"Filtered {len(qualified)}/{len(manifest.sessions)} sessions "
             f"with {score_name} score >= {threshold}{split_info}"
+        )
+        return qualified
+
+    def filter_by_percentile(
+        self, top_percentile: float, score_name: str = "default", split: Optional[str] = None
+    ) -> list[SessionInfo]:
+        """Return sessions that fall within the top percentile for the specified score."""
+        manifest = self.load_manifest()
+        if top_percentile <= 0:
+            logger.warning("top_percentile must be > 0 to filter by percentile")
+            return []
+
+        capped_percentile = min(top_percentile, 100.0)
+        candidate_scores: list[tuple[SessionInfo, float]] = []
+        for session in manifest.sessions:
+            if split is not None and session.split != split:
+                continue
+            score_value = session.get_score(score_name)
+            if score_value is not None:
+                candidate_scores.append((session, float(score_value)))
+
+        if not candidate_scores:
+            logger.warning(
+                f"No sessions found with score '{score_name}' for percentile filtering (split={split})"
+            )
+            return []
+
+        candidate_scores.sort(key=lambda item: item[1], reverse=True)
+        total = len(candidate_scores)
+        cutoff_count = max(1, math.ceil(total * (capped_percentile / 100.0)))
+        cutoff_score = candidate_scores[cutoff_count - 1][1]
+
+        qualified = [session for session, value in candidate_scores if value >= cutoff_score]
+
+        split_info = f" (split={split})" if split else ""
+        logger.info(
+            f"Filtered {len(qualified)}/{len(manifest.sessions)} sessions "
+            f"within top {capped_percentile}% for {score_name}{split_info}"
         )
         return qualified
 

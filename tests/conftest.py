@@ -119,7 +119,7 @@ def sample_chat_session() -> ChatSession:
             ),
             Turn(
                 turn_number=1,
-                role="user",
+                role="system",
                 message_type="tool_result(Read)",
                 content="def multiply(a, b):\n    return a * b",
             ),
@@ -137,7 +137,7 @@ def sample_chat_session() -> ChatSession:
             ),
             Turn(
                 turn_number=1,
-                role="user",
+                role="system",
                 message_type="tool_result(Edit)",
                 content="File edited successfully",
             ),

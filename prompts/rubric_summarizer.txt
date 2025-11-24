@@ -1,6 +1,6 @@
 You are an expert at synthesizing evaluation criteria for AI agent interactions.
 
-You have been given rubrics extracted from multiple high-quality chat sessions. Your task is to consolidate these into a final, coherent set of evaluation rubrics.
+You have been given rubrics extracted from multiple high-quality chat sessions. Your task is to consolidate these into a final, coherent set of evaluation rubrics that assess only the human user (messages labeled `role: user`) and never the AI assistant.
 
 ## Extracted Rubrics from All Sessions
 {all_rubrics}
@@ -35,4 +35,4 @@ Ensure each rubric:
 - Has a unique, descriptive name
 - Has clear, objective scoring criteria
 - Is applicable across different types of coding tasks
-- Focuses on USER behavior, not AI performance
+- Focuses exclusively on the human USER (messages with `role: user`), not AI performance

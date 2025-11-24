@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Generate dataset manifest from input directory with detailed metadata extraction."""
 
+import argparse
 import json
 import os
-import re
 import random
-from pathlib import Path
+import re
 from datetime import datetime
-from typing import Optional, Dict, Any
-import argparse
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 def format_size(size_bytes: int) -> str:
@@ -342,6 +342,31 @@ def process_jsonl_file(
     }
 
 
+def annotate_score_percentiles(sessions: list[Dict[str, Any]]) -> None:
+    """Annotate each session with percentile ranks per score."""
+    if not sessions:
+        return
+
+    # Collect score values per metric
+    score_entries: dict[str, list[tuple[int, float]]] = {}
+    for idx, session in enumerate(sessions):
+        for score_name, score_value in session.get("scores", {}).items():
+            if isinstance(score_value, (int, float)):
+                score_entries.setdefault(score_name, []).append((idx, float(score_value)))
+
+    for score_name, entries in score_entries.items():
+        if not entries:
+            continue
+
+        # Sort descending to compute percentile ranks
+        entries.sort(key=lambda item: item[1], reverse=True)
+        total = len(entries)
+        for rank, (session_idx, _) in enumerate(entries):
+            percentile_rank = round(100.0 * (total - rank) / total, 3)
+            session = sessions[session_idx]
+            percentiles = session.setdefault("score_percentiles", {})
+            percentiles[score_name] = percentile_rank
+
 def generate_manifest(
     input_dir: str,
     output_file: str,
@@ -394,6 +419,9 @@ def generate_manifest(
             print(f"\nRandomly sampling {max_sessions} sessions from {len(sessions)} total sessions")
             random.seed(42)  # Fixed seed for reproducibility
             sessions = random.sample(sessions, max_sessions)
+
+    # Annotate percentile stats before applying splits
+    annotate_score_percentiles(sessions)
 
     # Split into training and validation sets (9:1 ratio)
     if len(sessions) > 0:
@@ -471,7 +499,6 @@ def main():
         default=None,
         help="Maximum number of sessions to include in manifest (default: no limit)",
     )
-
     args = parser.parse_args()
 
     generate_manifest(

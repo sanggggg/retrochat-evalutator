@@ -31,7 +31,10 @@ Scoring Criteria:
 class TrainingConfig(BaseModel):
     """Configuration used during rubric training."""
 
-    score_threshold: float = Field(..., description="Minimum score threshold for sessions")
+    score_name: str = Field(..., description="Score name used for filtering")
+    score_top_percentile: Optional[float] = Field(
+        default=None, description="Top percentile cutoff applied to scores"
+    )
     sessions_used: int = Field(..., description="Number of sessions used for training")
     total_sessions: int = Field(..., description="Total sessions in dataset")
 

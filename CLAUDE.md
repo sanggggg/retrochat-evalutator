@@ -172,7 +172,7 @@ uv run retrochat-eval train \
 
     --score-name efficiency \
 
-    --score-threshold 4.0 \
+    --score-top-percentile 10 \
 
     --output ./rubrics.json
 
@@ -474,7 +474,7 @@ Legacy format with single `"score"` field is also supported (converted to `{"def
 
 ### Training Pipeline Flow
 
-1. `DatasetLoader` loads manifest and filters by score threshold
+1. `DatasetLoader` loads manifest and filters by top percentile
 
 2. `RubricExtractor` extracts rubrics from each qualified session (parallel)
 

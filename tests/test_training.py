@@ -41,6 +41,14 @@ class TestDatasetLoader:
         qualified = loader.filter_by_score(4.5, "efficiency")
         assert len(qualified) == 1  # Only one session with efficiency score >= 4.5
 
+    def test_filter_by_percentile(self, fixtures_dir: Path, mock_manifest_path: Path):
+        """Test filtering sessions by top percentile."""
+        loader = DatasetLoader(fixtures_dir, mock_manifest_path)
+
+        qualified = loader.filter_by_percentile(50.0, "efficiency")
+        assert len(qualified) == 2  # Top 50% of 3 sessions => 2 sessions
+        assert all(session.file != "low_score_session.jsonl" for session in qualified)
+
     def test_filter_by_different_score_name(self, fixtures_dir: Path, mock_manifest_path: Path):
         """Test filtering sessions by different score types."""
         loader = DatasetLoader(fixtures_dir, mock_manifest_path)
@@ -235,7 +243,7 @@ class TestTrainer:
             ]
         )
 
-        config = TrainingConfig(score_threshold=4.0, score_name="efficiency")
+        config = TrainingConfig(score_top_percentile=50.0, score_name="efficiency")
         trainer = Trainer(
             dataset_dir=fixtures_dir,
             manifest_path=mock_manifest_path,
@@ -599,7 +607,7 @@ class TestTrainerWithSemanticClustering:
         )
 
         config = TrainingConfig(
-            score_threshold=4.0,
+            score_top_percentile=50.0,
             score_name="efficiency",
             summarization_method=SummarizationMethod.SEMANTIC_CLUSTERING,
             similarity_threshold=0.6,

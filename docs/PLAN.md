@@ -120,7 +120,7 @@ retrochat-evaluator/
 
 **Workflow**:
 1. Load dataset with chat sessions and their scores
-2. Filter sessions with score >= threshold (by score name)
+2. Filter sessions to the top percentile (by score name)
 3. Extract rubrics from each qualified session using LLM
 4. Consolidate all extracted rubrics into final rubric list (using LLM or semantic clustering)
 5. Automatically validate trained rubrics on validation split
@@ -193,7 +193,7 @@ class EvaluationResult:
 uv run retrochat-eval train \
     --dataset-dir ./input \
     --dataset-manifest ./dataset.json \
-    --score-threshold 4.0 \
+    --score-top-percentile 10 \
     --score-name default \
     --output ./output
 
@@ -253,7 +253,7 @@ Configuration can be provided via:
 ### YAML Config File
 See `config.example.yaml` for full configuration options including:
 - LLM settings (model, temperature, max_tokens) for extraction, summarization, and evaluation
-- Training settings (score threshold, score name, summarization method)
+- Training settings (score percentile/threshold, score name, summarization method)
 - Path configurations (dataset directory, manifest, prompts directory)
 - Semantic clustering settings (embedding model, similarity threshold)
 

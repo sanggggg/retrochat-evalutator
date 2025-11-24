@@ -139,23 +139,29 @@ class Trainer:
         logger.info("Starting training pipeline")
 
         # 1. Load and filter sessions (only training split if available)
-        logger.info(
-            f"Filtering training sessions with {self.config.score_name} score >= {self.config.score_threshold}"
-        )
-        # If split is available, use only training split; otherwise use all sessions
-        qualified_sessions = self.loader.filter_by_score(
-            self.config.score_threshold, self.config.score_name, split="training"
-        )
-        # If no training sessions found (e.g., old dataset without split), fall back to all
-        if not qualified_sessions:
-            logger.warning("No training split found, using all sessions (legacy dataset?)")
-            qualified_sessions = self.loader.filter_by_score(
-                self.config.score_threshold, self.config.score_name, split=None
+        qualified_sessions = []
+        if self.config.score_top_percentile is not None:
+            logger.info(
+                f"Filtering training sessions to top {self.config.score_top_percentile}% "
+                f"by {self.config.score_name} score"
             )
+            qualified_sessions = self.loader.filter_by_percentile(
+                self.config.score_top_percentile, self.config.score_name, split="training"
+            )
+            if not qualified_sessions:
+                logger.warning("No training split found, using all sessions (legacy dataset?)")
+                qualified_sessions = self.loader.filter_by_percentile(
+                    self.config.score_top_percentile, self.config.score_name, split=None
+                )
+        else:
+            logger.info("No score filter configured, using all available sessions")
+            qualified_sessions = self.loader.filter_by_split("training")
+            if not qualified_sessions:
+                qualified_sessions = self.loader.load_manifest().sessions
         total_sessions = self.loader.get_session_count()
 
         if not qualified_sessions:
-            logger.warning("No sessions passed the score threshold")
+            logger.warning("No sessions satisfied the configured score filter")
             return RubricList(rubrics=[]), {}, []
 
         # 2. Load chat content for each session
@@ -169,10 +175,14 @@ class Trainer:
         )
 
         if len(chat_sessions) < 3:
-            logger.warning(
-                f"Only {len(chat_sessions)} sessions loaded. "
-                "Consider lowering the score threshold for better results."
-            )
+            if self.config.score_top_percentile is not None:
+                guidance = (
+                    f"Consider increasing the percentile cutoff "
+                    f"(currently top {self.config.score_top_percentile}%) for better coverage."
+                )
+            else:
+                guidance = "Consider adding more sessions to the dataset."
+            logger.warning(f"Only {len(chat_sessions)} sessions loaded. {guidance}")
 
         # 3. Extract rubrics from each session (parallel)
         logger.info(f"Extracting rubrics from {len(chat_sessions)} sessions")
@@ -207,7 +217,8 @@ class Trainer:
             version="1.0",
             created_at=datetime.utcnow(),
             training_config=RubricTrainingConfig(
-                score_threshold=self.config.score_threshold,
+                score_name=self.config.score_name,
+                score_top_percentile=self.config.score_top_percentile,
                 sessions_used=len(chat_sessions),
                 total_sessions=total_sessions,
             ),
@@ -267,8 +278,8 @@ class Trainer:
             "created_at": rubrics.created_at.isoformat(),
             "version": rubrics.version,
             "training_config": {
-                "score_threshold": self.config.score_threshold,
                 "score_name": self.config.score_name,
+                "score_top_percentile": self.config.score_top_percentile,
                 "sessions_used": (
                     rubrics.training_config.sessions_used if rubrics.training_config else 0
                 ),

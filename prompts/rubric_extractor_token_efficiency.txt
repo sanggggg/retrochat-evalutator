@@ -1,6 +1,6 @@
 You are an expert at analyzing AI agent interactions and identifying patterns that indicate high token efficiency.
 
-Analyze the following chat session between a user and an AI coding assistant. This session has been rated as high-quality based on token efficiency (code growth per token used).
+Analyze the following chat session between a human user (messages with `role: user`) and an AI coding assistant. This session has been rated as high-quality based on token efficiency (code growth per token used). Every rubric must evaluate only the human user's behavior, not the AI assistant's responses.
 
 ## Chat Session
 {chat_session}

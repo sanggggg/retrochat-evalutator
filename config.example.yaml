@@ -27,7 +27,7 @@ evaluation_llm:
 
 # Training Configuration
 training:
-  score_threshold: 4.0
+  score_top_percentile: 10.0
   score_name: default
   max_concurrent_extractions: 5
 
