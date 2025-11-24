@@ -160,17 +160,12 @@ class Trainer:
 
         # 2. Load chat content for each session
         logger.info("Loading chat sessions")
-        # Use sample_size if set, otherwise use max_sessions
-        max_sessions = (
-            self.config.sample_size
-            if self.config.sample_size is not None
-            else self.config.max_sessions
-        )
-        if self.config.sample_size is not None:
-            logger.info(f"Using sample size limit: {self.config.sample_size} sessions")
+        # Note: max_sessions and sample_size are no longer in config.
+        # They should be specified when generating dataset.json via generate_manifest.py
+        # For training, all sessions in the manifest are used (no additional limiting).
         chat_sessions = self.loader.load_sessions(
             qualified_sessions,
-            max_sessions=max_sessions,
+            max_sessions=None,  # Use all sessions from manifest
         )
 
         if len(chat_sessions) < 3:
@@ -282,8 +277,6 @@ class Trainer:
                 "total_sessions": (
                     rubrics.training_config.total_sessions if rubrics.training_config else 0
                 ),
-                "max_sessions": self.config.max_sessions,
-                "sample_size": self.config.sample_size,
                 "summarization_method": self.config.summarization_method.value,
                 "min_rubrics": self.config.min_rubrics,
                 "max_rubrics": self.config.max_rubrics,

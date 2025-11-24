@@ -342,7 +342,12 @@ def process_jsonl_file(
     }
 
 
-def generate_manifest(input_dir: str, output_file: str, min_size_kb: int = 4):
+def generate_manifest(
+    input_dir: str,
+    output_file: str,
+    min_size_kb: int = 4,
+    max_sessions: Optional[int] = None,
+):
     """Generate manifest from input directory."""
     input_path = Path(input_dir)
 
@@ -382,6 +387,13 @@ def generate_manifest(input_dir: str, output_file: str, min_size_kb: int = 4):
     print(f"\nProcessed {processed + skipped} files:")
     print(f"  Kept: {processed} files (>= {min_size_kb}KB)")
     print(f"  Skipped: {skipped} files (< {min_size_kb}KB or errors)")
+
+    # Apply session limits if specified (random sampling)
+    if max_sessions is not None:
+        if len(sessions) > max_sessions:
+            print(f"\nRandomly sampling {max_sessions} sessions from {len(sessions)} total sessions")
+            random.seed(42)  # Fixed seed for reproducibility
+            sessions = random.sample(sessions, max_sessions)
 
     # Split into training and validation sets (9:1 ratio)
     if len(sessions) > 0:
@@ -453,10 +465,21 @@ def main():
     parser.add_argument(
         "--min-size-kb", type=int, default=4, help="Minimum file size in KB to include (default: 4)"
     )
+    parser.add_argument(
+        "--max-sessions",
+        type=int,
+        default=None,
+        help="Maximum number of sessions to include in manifest (default: no limit)",
+    )
 
     args = parser.parse_args()
 
-    generate_manifest(args.input_dir, args.output, args.min_size_kb)
+    generate_manifest(
+        args.input_dir,
+        args.output,
+        args.min_size_kb,
+        args.max_sessions,
+    )
 
 
 if __name__ == "__main__":

@@ -203,18 +203,6 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="Directory containing prompt templates (default: prompts/)",
 )
 @click.option(
-    "--max-sessions",
-    type=int,
-    default=None,
-    help="Maximum number of sessions to use for training",
-)
-@click.option(
-    "--sample-size",
-    type=int,
-    default=None,
-    help="Limit to small sample size for testing/debugging (e.g., 5). Takes precedence over max-sessions if set.",
-)
-@click.option(
     "--summarization-method",
     type=click.Choice(["llm", "semantic_clustering"], case_sensitive=False),
     default=None,
@@ -254,8 +242,6 @@ def train(
     score_name: str | None,
     output: Path | None,
     prompts_dir: Path | None,
-    max_sessions: int | None,
-    sample_size: int | None,
     summarization_method: str | None,
     embedding_model: str | None,
     similarity_threshold: float | None,
@@ -276,10 +262,8 @@ def train(
         training_config.score_threshold = score_threshold
     if score_name is not None:
         training_config.score_name = score_name
-    if max_sessions is not None:
-        training_config.max_sessions = max_sessions
-    if sample_size is not None:
-        training_config.sample_size = sample_size
+    # Note: max_sessions and sample_size are no longer supported via CLI.
+    # They should be specified when generating dataset.json via generate_manifest.py
     if summarization_method is not None:
         training_config.summarization_method = SummarizationMethod(summarization_method.lower())
     if embedding_model is not None:
