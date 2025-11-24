@@ -16,6 +16,7 @@ from ..config import (
     Config,
     EvaluationConfig,
     EvaluationLLMConfig,
+    RateLimiterConfig,
 )
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
@@ -42,6 +43,7 @@ class Trainer:
         full_config: Optional[Config] = None,
         evaluation_config: Optional[EvaluationConfig] = None,
         evaluation_llm_config: Optional[EvaluationLLMConfig] = None,
+        rate_limiter_config: Optional[RateLimiterConfig] = None,
     ):
         """Initialize trainer.
 
@@ -55,12 +57,14 @@ class Trainer:
             full_config: Full configuration object for metadata (optional).
             evaluation_config: Evaluation configuration for validation (optional).
             evaluation_llm_config: LLM configuration for evaluation (optional).
+            rate_limiter_config: Shared rate limiter configuration for all LLM clients.
         """
         self.config = config or TrainingConfig()
         self.extraction_llm_config = extraction_llm_config or ExtractionLLMConfig()
         self.summarization_llm_config = summarization_llm_config or SummarizationLLMConfig()
         self.evaluation_config = evaluation_config
         self.evaluation_llm_config = evaluation_llm_config
+        self.rate_limiter_config = rate_limiter_config
         self.full_config = full_config
         self.prompts_dir = Path(prompts_dir)
 
@@ -75,13 +79,19 @@ class Trainer:
     def _get_extraction_llm_client(self) -> GeminiClient:
         """Get or create LLM client for extraction."""
         if self._extraction_llm_client is None:
-            self._extraction_llm_client = GeminiClient(self.extraction_llm_config)
+            self._extraction_llm_client = GeminiClient(
+                self.extraction_llm_config,
+                rate_limiter_config=self.rate_limiter_config,
+            )
         return self._extraction_llm_client
 
     def _get_summarization_llm_client(self) -> GeminiClient:
         """Get or create LLM client for summarization."""
         if self._summarization_llm_client is None:
-            self._summarization_llm_client = GeminiClient(self.summarization_llm_config)
+            self._summarization_llm_client = GeminiClient(
+                self.summarization_llm_config,
+                rate_limiter_config=self.rate_limiter_config,
+            )
         return self._summarization_llm_client
 
     def _get_extractor(self) -> RubricExtractor:
@@ -392,6 +402,7 @@ class Trainer:
                     score_name=self.config.score_name,
                     config=eval_config,
                     llm_config=eval_llm_config,
+                    rate_limiter_config=self.rate_limiter_config,
                 )
 
                 # Run validation

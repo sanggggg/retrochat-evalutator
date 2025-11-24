@@ -315,6 +315,7 @@ def train(
         extraction_llm_config=cfg.extraction_llm,
         summarization_llm_config=cfg.summarization_llm,
         full_config=cfg,
+        rate_limiter_config=cfg.rate_limiter,
     )
 
     try:
@@ -410,7 +411,11 @@ def evaluate(
         click.echo(f"Loaded session {chat_session.session_id} ({chat_session.turn_count} turns)")
 
         # Create evaluator and run
-        evaluator = Evaluator(prompts_dir=prompts_dir)
+        cfg = Config.from_env()
+        evaluator = Evaluator(
+            prompts_dir=prompts_dir,
+            rate_limiter_config=cfg.rate_limiter,
+        )
 
         with get_usage_metadata_callback() as cb:
             result = asyncio.run(
@@ -522,7 +527,11 @@ def evaluate_batch(
         click.echo(f"Successfully loaded {len(sessions)} sessions")
 
         # Create evaluator and run
-        evaluator = Evaluator(prompts_dir=prompts_dir)
+        cfg = Config.from_env()
+        evaluator = Evaluator(
+            prompts_dir=prompts_dir,
+            rate_limiter_config=cfg.rate_limiter,
+        )
 
         with get_usage_metadata_callback() as cb:
             results = asyncio.run(
@@ -665,6 +674,7 @@ def validate(
         prompts_dir=prompts_dir,
         score_name=score_name,
         llm_config=cfg.evaluation_llm,
+        rate_limiter_config=cfg.rate_limiter,
     )
 
     try:

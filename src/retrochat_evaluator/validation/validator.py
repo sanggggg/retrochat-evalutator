@@ -11,7 +11,7 @@ from ..models.validation import (
     SessionValidationResult,
     ValidationReport,
 )
-from ..config import EvaluationConfig, EvaluationLLMConfig
+from ..config import EvaluationConfig, EvaluationLLMConfig, RateLimiterConfig
 from ..training.loader import DatasetLoader, SessionInfo
 from ..evaluation.evaluator import Evaluator
 
@@ -30,6 +30,7 @@ class Validator:
         score_name: str = "default",
         config: Optional[EvaluationConfig] = None,
         llm_config: Optional[EvaluationLLMConfig] = None,
+        rate_limiter_config: Optional[RateLimiterConfig] = None,
     ):
         """Initialize validator.
 
@@ -41,6 +42,7 @@ class Validator:
             score_name: Name of the score to use for comparison.
             config: Evaluation configuration.
             llm_config: LLM configuration for evaluation.
+            rate_limiter_config: Shared rate limiter configuration for all LLM clients.
         """
         self.dataset_dir = Path(dataset_dir)
         self.manifest_path = Path(manifest_path)
@@ -50,6 +52,7 @@ class Validator:
 
         self.config = config or EvaluationConfig()
         self.llm_config = llm_config or EvaluationLLMConfig()
+        self.rate_limiter_config = rate_limiter_config
 
         # Initialize components
         self._loader: Optional[DatasetLoader] = None
@@ -69,6 +72,7 @@ class Validator:
                 prompts_dir=self.prompts_dir,
                 config=self.config,
                 llm_config=self.llm_config,
+                rate_limiter_config=self.rate_limiter_config,
             )
         return self._evaluator
 

@@ -18,6 +18,15 @@ class SummarizationMethod(str, Enum):
 
 
 @dataclass
+class RateLimiterConfig:
+    """Configuration for shared rate limiter across all LLM clients."""
+
+    requests_per_second: float = 1.0
+    check_every_n_seconds: float = 0.1
+    max_bucket_size: int = 10
+
+
+@dataclass
 class LLMConfig:
     """Configuration for LLM client."""
 
@@ -104,6 +113,9 @@ class Config:
     summarization_llm: SummarizationLLMConfig = field(default_factory=SummarizationLLMConfig)
     evaluation_llm: EvaluationLLMConfig = field(default_factory=EvaluationLLMConfig)
 
+    # Shared rate limiter configuration
+    rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
+
     training: TrainingConfig = field(default_factory=TrainingConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     prompts_dir: Path = field(default_factory=lambda: Path("prompts"))
@@ -165,6 +177,7 @@ class Config:
         extraction_llm_data = data.get("extraction_llm", {})
         summarization_llm_data = data.get("summarization_llm", {})
         evaluation_llm_data = data.get("evaluation_llm", {})
+        rate_limiter_data = data.get("rate_limiter", {})
         training_data = data.get("training", {})
         evaluation_data = data.get("evaluation", {})
 
@@ -191,6 +204,7 @@ class Config:
             extraction_llm=ExtractionLLMConfig(**extraction_llm_data),
             summarization_llm=SummarizationLLMConfig(**summarization_llm_data),
             evaluation_llm=EvaluationLLMConfig(**evaluation_llm_data),
+            rate_limiter=RateLimiterConfig(**rate_limiter_data),
             training=TrainingConfig(**training_data),
             evaluation=EvaluationConfig(**evaluation_data),
             prompts_dir=prompts_dir,

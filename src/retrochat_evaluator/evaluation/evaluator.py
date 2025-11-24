@@ -7,7 +7,7 @@ from typing import Optional
 from ..models.rubric import Rubric, RubricList
 from ..models.chat_session import ChatSession
 from ..models.evaluation import EvaluationResult, BatchEvaluationSummary
-from ..config import EvaluationConfig, EvaluationLLMConfig
+from ..config import EvaluationConfig, EvaluationLLMConfig, RateLimiterConfig
 from ..llm.gemini import GeminiClient
 from .judge import JudgePromptGenerator
 from .scorer import RubricScorer
@@ -24,6 +24,7 @@ class Evaluator:
         prompts_dir: Path,
         config: Optional[EvaluationConfig] = None,
         llm_config: Optional[EvaluationLLMConfig] = None,
+        rate_limiter_config: Optional[RateLimiterConfig] = None,
     ):
         """Initialize evaluator.
 
@@ -31,9 +32,11 @@ class Evaluator:
             prompts_dir: Directory containing prompt templates.
             config: Evaluation configuration.
             llm_config: LLM configuration for evaluation.
+            rate_limiter_config: Shared rate limiter configuration for all LLM clients.
         """
         self.config = config or EvaluationConfig()
         self.llm_config = llm_config or EvaluationLLMConfig()
+        self.rate_limiter_config = rate_limiter_config
         self.prompts_dir = Path(prompts_dir)
 
         # Initialize components
@@ -45,7 +48,10 @@ class Evaluator:
     def _get_llm_client(self) -> GeminiClient:
         """Get or create LLM client."""
         if self._llm_client is None:
-            self._llm_client = GeminiClient(self.llm_config)
+            self._llm_client = GeminiClient(
+                self.llm_config,
+                rate_limiter_config=self.rate_limiter_config,
+            )
         return self._llm_client
 
     def _get_prompt_generator(self) -> JudgePromptGenerator:

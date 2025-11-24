@@ -6,31 +6,74 @@ from typing import Optional
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
-from ..config import LLMConfig
+from ..config import LLMConfig, RateLimiterConfig
 
 logger = logging.getLogger(__name__)
+
+# Global shared rate limiter instance
+_shared_rate_limiter: Optional[InMemoryRateLimiter] = None
+
+
+def get_shared_rate_limiter(config: Optional[RateLimiterConfig] = None) -> InMemoryRateLimiter:
+    """Get or create the shared rate limiter instance.
+
+    Args:
+        config: Rate limiter configuration. Only used on first call to create the instance.
+
+    Returns:
+        The shared InMemoryRateLimiter instance.
+    """
+    global _shared_rate_limiter
+    if _shared_rate_limiter is None:
+        config = config or RateLimiterConfig()
+        _shared_rate_limiter = InMemoryRateLimiter(
+            requests_per_second=config.requests_per_second,
+            check_every_n_seconds=config.check_every_n_seconds,
+            max_bucket_size=config.max_bucket_size,
+        )
+        logger.info(
+            f"Created shared rate limiter: {config.requests_per_second} req/s, "
+            f"max_bucket_size={config.max_bucket_size}"
+        )
+    return _shared_rate_limiter
+
+
+def reset_shared_rate_limiter() -> None:
+    """Reset the shared rate limiter (useful for testing)."""
+    global _shared_rate_limiter
+    _shared_rate_limiter = None
 
 
 class GeminiClient:
     """Client for Google Gemini via LangChain."""
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(
+        self,
+        config: Optional[LLMConfig] = None,
+        rate_limiter_config: Optional[RateLimiterConfig] = None,
+    ):
         """Initialize Gemini client.
 
         Args:
             config: LLM configuration. Uses defaults if not provided.
+            rate_limiter_config: Rate limiter configuration. Uses shared rate limiter.
         """
         self.config = config or LLMConfig()
 
         if not self.config.api_key:
             raise ValueError("GOOGLE_API_KEY is required. Set it in .env or pass via config.")
 
+        # Get the shared rate limiter (created on first call)
+        self._rate_limiter = get_shared_rate_limiter(rate_limiter_config)
+
         self._client = ChatGoogleGenerativeAI(
             model=self.config.model_name,
             google_api_key=self.config.api_key,
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_tokens,
+            rate_limiter=self._rate_limiter,
         )
 
     async def generate(
@@ -57,6 +100,7 @@ class GeminiClient:
                 google_api_key=self.config.api_key,
                 temperature=temperature if temperature is not None else self.config.temperature,
                 max_output_tokens=max_tokens if max_tokens is not None else self.config.max_tokens,
+                rate_limiter=self._rate_limiter,
             )
 
         message = HumanMessage(content=prompt)
