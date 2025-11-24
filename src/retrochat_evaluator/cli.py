@@ -316,6 +316,7 @@ def train(
     try:
 
         async def run_training():
+            nonlocal output
             with get_usage_metadata_callback() as cb:
                 rubrics, raw_rubrics_map, _ = await trainer.train()
 
@@ -608,12 +609,6 @@ def evaluate_batch(
     default=None,
     help="Directory containing prompt templates (default: prompts/)",
 )
-@click.option(
-    "--max-sessions",
-    type=int,
-    default=None,
-    help="Maximum number of sessions to validate",
-)
 @click.pass_context
 def validate(
     ctx: click.Context,
@@ -624,7 +619,6 @@ def validate(
     score_name: str | None,
     output: Path | None,
     prompts_dir: Path | None,
-    max_sessions: int | None,
 ) -> None:
     """Validate evaluation accuracy by comparing predicted vs real scores.
 
@@ -676,7 +670,7 @@ def validate(
 
         # Run validation
         with get_usage_metadata_callback() as cb:
-            report = asyncio.run(validator.validate(max_sessions=max_sessions))
+            report = asyncio.run(validator.validate())
 
             if report.total_sessions == 0:
                 click.echo(

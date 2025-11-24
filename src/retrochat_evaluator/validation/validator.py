@@ -78,14 +78,8 @@ class Validator:
             self._rubric_list = RubricList.from_json(self.rubrics_path)
         return self._rubric_list
 
-    async def validate(
-        self,
-        max_sessions: Optional[int] = None,
-    ) -> ValidationReport:
+    async def validate(self) -> ValidationReport:
         """Execute full validation pipeline.
-
-        Args:
-            max_sessions: Maximum number of sessions to validate.
 
         Returns:
             ValidationReport comparing predicted vs real scores.
@@ -118,9 +112,6 @@ class Validator:
                 score_name=self.score_name,
                 rubrics_file=str(self.rubrics_path),
             )
-
-        if max_sessions:
-            session_infos = session_infos[:max_sessions]
 
         logger.info(
             f"Validating {len(session_infos)} sessions against {len(rubric_list.rubrics)} rubrics"

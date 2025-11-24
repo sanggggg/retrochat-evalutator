@@ -272,7 +272,7 @@ class TestValidator:
                 score_name="efficiency",
             )
 
-            report = await validator.validate(max_sessions=2)
+            report = await validator.validate()
 
             assert isinstance(report, ValidationReport)
             assert report.total_sessions == 2
@@ -311,7 +311,7 @@ class TestValidator:
         temp_rubrics_file: Path,
         mock_judge_response: str,
     ):
-        """Test validating all sessions without max_sessions limit."""
+        """Test validating all sessions."""
         manifest_path = fixtures_dir / "mock_manifest.json"
 
         with patch("retrochat_evaluator.evaluation.evaluator.GeminiClient") as MockClient:

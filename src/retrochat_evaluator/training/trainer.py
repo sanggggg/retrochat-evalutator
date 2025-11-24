@@ -224,7 +224,6 @@ class Trainer:
         output_path: Path,
         raw_rubrics_map: Optional[dict[str, list[Rubric]]] = None,
         validate: bool = True,
-        validation_max_sessions: Optional[int] = None,
     ) -> Path:
         """Save rubrics to organized folder structure.
 
@@ -239,7 +238,6 @@ class Trainer:
             output_path: Base output directory (will create subfolder).
             raw_rubrics_map: Optional mapping of session_id to extracted rubrics.
             validate: Whether to perform validation after saving (default: True).
-            validation_max_sessions: Maximum number of sessions to use for validation.
 
         Returns:
             Path to the created training result folder.
@@ -386,9 +384,7 @@ class Trainer:
                 )
 
                 # Run validation
-                validation_report = await validator.validate(
-                    max_sessions=validation_max_sessions,
-                )
+                validation_report = await validator.validate()
 
                 # Convert validation report to dict for metadata
                 validation_metrics = validation_report.metrics
@@ -421,11 +417,15 @@ class Trainer:
 
                 # Log validation summary
                 metrics = validation_metrics
+
+                def _fmt_optional(value: float | None) -> str:
+                    return f"{value:.4f}" if value is not None else "N/A"
+
                 logger.info(
-                    f"Validation complete: "
-                    f"Correlation={metrics.correlation:.4f if metrics.correlation else 'N/A'}, "
-                    f"Rank Correlation={metrics.rank_correlation:.4f if metrics.rank_correlation else 'N/A'}, "
-                    f"R²={metrics.r_squared:.4f if metrics.r_squared else 'N/A'}, "
+                    "Validation complete: "
+                    f"Correlation={_fmt_optional(metrics.correlation)}, "
+                    f"Rank Correlation={_fmt_optional(metrics.rank_correlation)}, "
+                    f"R²={_fmt_optional(metrics.r_squared)}, "
                     f"MAE={metrics.mean_absolute_error:.4f}"
                 )
 
