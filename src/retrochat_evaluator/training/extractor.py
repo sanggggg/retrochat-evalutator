@@ -59,11 +59,11 @@ class RubricExtractor:
 
         logger.debug(f"Extracting rubrics from session {session.session_id}")
         response = await self.llm.generate(prompt)
-        
+
         if not response:
             logger.warning(f"Empty response from LLM for session {session.session_id}")
             return []
-        
+
         if not isinstance(response, str):
             logger.warning(
                 f"Unexpected response type {type(response).__name__} for session {session.session_id}"
@@ -96,7 +96,7 @@ class RubricExtractor:
                     logger.error(
                         f"Failed to extract from session {session.session_id}: "
                         f"{type(e).__name__}: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     return []
 
@@ -174,8 +174,7 @@ class RubricExtractor:
                 rubrics.append(rubric)
             except Exception as e:
                 logger.warning(
-                    f"Failed to create rubric {i} for session {session_id}: {e}\n"
-                    f"Data: {data}"
+                    f"Failed to create rubric {i} for session {session_id}: {e}\n" f"Data: {data}"
                 )
 
         logger.debug(f"Parsed {len(rubrics)} rubrics from session {session_id}")

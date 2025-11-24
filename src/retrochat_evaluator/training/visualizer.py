@@ -6,7 +6,8 @@ from typing import Optional
 
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+
+matplotlib.use("Agg")  # Use non-interactive backend
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
@@ -41,13 +42,14 @@ def save_clustering_visualization(
     # Use t-SNE for dimensionality reduction
     # For small datasets, use smaller perplexity
     perplexity = min(30, max(5, len(embeddings) - 1))
-    
+
     try:
         tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity, n_iter=1000)
         embeddings_2d = tsne.fit_transform(embeddings)
     except Exception as e:
         logger.warning(f"t-SNE failed, trying PCA: {e}")
         from sklearn.decomposition import PCA
+
         pca = PCA(n_components=2, random_state=42)
         embeddings_2d = pca.fit_transform(embeddings)
 
@@ -57,9 +59,9 @@ def save_clustering_visualization(
     # Get unique clusters and assign colors
     unique_clusters = sorted(set(clusters))
     n_clusters = len(unique_clusters)
-    
+
     # Use a colormap for distinct colors
-    colormap_name = 'tab20' if n_clusters <= 20 else 'tab20b'
+    colormap_name = "tab20" if n_clusters <= 20 else "tab20b"
     try:
         # Try new matplotlib API (3.5+)
         cmap = plt.colormaps[colormap_name]
@@ -72,7 +74,7 @@ def save_clustering_visualization(
     for i, cluster_id in enumerate(unique_clusters):
         mask = clusters == cluster_id
         cluster_points = embeddings_2d[mask]
-        
+
         # Plot points
         ax.scatter(
             cluster_points[:, 0],
@@ -81,7 +83,7 @@ def save_clustering_visualization(
             label=f"Cluster {cluster_id} (n={len(cluster_points)})",
             alpha=0.6,
             s=100,
-            edgecolors='black',
+            edgecolors="black",
             linewidths=0.5,
         )
 
@@ -91,10 +93,10 @@ def save_clustering_visualization(
             f"C{cluster_id}",
             xy=centroid,
             xytext=(5, 5),
-            textcoords='offset points',
+            textcoords="offset points",
             fontsize=9,
-            fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.3', facecolor=colors[i], alpha=0.7),
+            fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=colors[i], alpha=0.7),
         )
 
     # Customize plot
@@ -104,16 +106,15 @@ def save_clustering_visualization(
         f"Semantic Clustering Visualization\n"
         f"{len(all_rubrics)} rubrics grouped into {n_clusters} clusters",
         fontsize=14,
-        fontweight='bold',
+        fontweight="bold",
     )
     ax.grid(True, alpha=0.3)
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
 
     # Save figure
     plt.tight_layout()
     visualization_path = result_folder / "clustering_visualization.png"
-    fig.savefig(visualization_path, dpi=300, bbox_inches='tight')
+    fig.savefig(visualization_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     logger.info(f"Saved clustering visualization to {visualization_path}")
-

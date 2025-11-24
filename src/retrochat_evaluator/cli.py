@@ -29,52 +29,54 @@ def setup_logging(verbose: bool) -> None:
 
 def get_model_pricing(model_name: str) -> tuple[float, float]:
     """Get input and output token pricing per 1M tokens for a model.
-    
+
     Args:
         model_name: The model name (e.g., 'gemini-2.5-pro', 'gemini-2.5-flash-lite')
-        
+
     Returns:
         Tuple of (input_price_per_1M, output_price_per_1M) in USD.
         Returns (0.0, 0.0) if model pricing is not found.
-        
+
     Reference: https://ai.google.dev/gemini-api/docs/pricing
     """
     model_lower = model_name.lower()
-    
+
     # Gemini 3 Pro Preview
     if "gemini-3-pro" in model_lower and "image" not in model_lower:
         # For prompts <= 200k tokens: $1.00 input, $6.00 output
         # For prompts > 200k tokens: $2.00 input, $9.00 output
         # We'll use the <= 200k pricing as default (most common case)
         return (1.00, 6.00)
-    
+
     # Gemini 2.5 Pro
     if "gemini-2.5-pro" in model_lower and "flash" not in model_lower:
         # For prompts <= 200k tokens: $0.625 input, $1.25 output
         # For prompts > 200k tokens: $5.00 input, $7.50 output
         return (0.625, 5.00)
-    
+
     # Gemini 2.5 Flash
     if "gemini-2.5-flash" in model_lower and "lite" not in model_lower:
         return (0.15, 1.25)
-    
+
     # Gemini 2.5 Flash-Lite
     if "gemini-2.5-flash-lite" in model_lower:
         return (0.05, 0.20)
-    
+
     # Default: unknown model, return 0
     return (0.0, 0.0)
 
 
-def calculate_cost(input_tokens: int, output_tokens: int, input_price: float, output_price: float) -> float:
+def calculate_cost(
+    input_tokens: int, output_tokens: int, input_price: float, output_price: float
+) -> float:
     """Calculate total cost in USD.
-    
+
     Args:
         input_tokens: Number of input tokens
         output_tokens: Number of output tokens
         input_price: Price per 1M input tokens
         output_price: Price per 1M output tokens
-        
+
     Returns:
         Total cost in USD
     """
@@ -85,41 +87,41 @@ def calculate_cost(input_tokens: int, output_tokens: int, input_price: float, ou
 
 def format_token_usage(usage_metadata: dict) -> None:
     """Format and display token usage with cost information.
-    
+
     Args:
         usage_metadata: Token usage metadata from LangChain callback
     """
     if not usage_metadata:
         return
-    
+
     click.echo("\n" + "=" * 60)
     click.echo("Token Usage Summary:")
     click.echo("=" * 60)
-    
+
     total_input = 0
     total_output = 0
     total_tokens = 0
     total_cost = 0.0
-    
+
     for model_name, usage in usage_metadata.items():
         input_tokens = usage.get("input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
         total = usage.get("total_tokens", 0)
-        
+
         total_input += input_tokens
         total_output += output_tokens
         total_tokens += total
-        
+
         # Get pricing for this model
         input_price, output_price = get_model_pricing(model_name)
         cost = calculate_cost(input_tokens, output_tokens, input_price, output_price)
         total_cost += cost
-        
+
         click.echo(f"\n{model_name}:")
         click.echo(f"  Input tokens:  {input_tokens:,}")
         click.echo(f"  Output tokens: {output_tokens:,}")
         click.echo(f"  Total tokens:  {total:,}")
-        
+
         if input_price > 0 or output_price > 0:
             input_cost = (input_tokens / 1_000_000) * input_price
             output_cost = (output_tokens / 1_000_000) * output_price
@@ -128,7 +130,7 @@ def format_token_usage(usage_metadata: dict) -> None:
             click.echo(f"  Total cost:    ${cost:.6f}")
         else:
             click.echo(f"  Cost:          Unknown pricing for this model")
-    
+
     click.echo("\n" + "-" * 60)
     click.echo("Total across all models:")
     click.echo(f"  Input tokens:  {total_input:,}")
@@ -341,7 +343,7 @@ def train(
             elif output.suffix == ".json":
                 # If user provided a .json file, use its parent directory
                 output = output.parent / "output"
-            
+
             result_folder = trainer.save_rubrics(rubrics, output, raw_rubrics_map)
             click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
             click.echo(f"Saved to: {result_folder}")
@@ -416,7 +418,7 @@ def evaluate(
 
         # Create evaluator and run
         evaluator = Evaluator(prompts_dir=prompts_dir)
-        
+
         with get_usage_metadata_callback() as cb:
             result = asyncio.run(
                 evaluator.evaluate(
@@ -528,7 +530,7 @@ def evaluate_batch(
 
         # Create evaluator and run
         evaluator = Evaluator(prompts_dir=prompts_dir)
-        
+
         with get_usage_metadata_callback() as cb:
             results = asyncio.run(
                 evaluator.evaluate_batch(
@@ -707,7 +709,9 @@ def validate(
 
             click.echo(f"\nMetrics:")
             click.echo(f"  Mean Absolute Error (MAE): {report.metrics.mean_absolute_error}")
-            click.echo(f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}")
+            click.echo(
+                f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}"
+            )
             click.echo(f"  Mean Error (bias): {report.metrics.mean_error}")
             if report.metrics.correlation is not None:
                 click.echo(f"  Correlation: {report.metrics.correlation}")

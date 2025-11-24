@@ -145,22 +145,34 @@ class Validator:
         # Build metrics summary
         metrics = report.metrics
         metric_parts = [
-            f"Pearson Correlation: {metrics.correlation:.4f}" if metrics.correlation is not None else None,
-            f"Spearman Rank Correlation: {metrics.rank_correlation:.4f}" if metrics.rank_correlation is not None else None,
+            (
+                f"Pearson Correlation: {metrics.correlation:.4f}"
+                if metrics.correlation is not None
+                else None
+            ),
+            (
+                f"Spearman Rank Correlation: {metrics.rank_correlation:.4f}"
+                if metrics.rank_correlation is not None
+                else None
+            ),
             f"R²: {metrics.r_squared:.4f}" if metrics.r_squared is not None else None,
         ]
         if metrics.normalized_mae is not None:
             metric_parts.append(f"Normalized MAE: {metrics.normalized_mae:.4f}")
         if metrics.normalized_rmse is not None:
             metric_parts.append(f"Normalized RMSE: {metrics.normalized_rmse:.4f}")
-        
+
         # Also show absolute errors with warning note
-        metric_parts.extend([
-            f"MAE: {metrics.mean_absolute_error:.4f} (note: may not be meaningful if scales differ)",
-            f"RMSE: {metrics.root_mean_squared_error:.4f} (note: may not be meaningful if scales differ)",
-        ])
-        
-        logger.info(f"Validation complete. {' | '.join([m for m in metric_parts if m is not None])}")
+        metric_parts.extend(
+            [
+                f"MAE: {metrics.mean_absolute_error:.4f} (note: may not be meaningful if scales differ)",
+                f"RMSE: {metrics.root_mean_squared_error:.4f} (note: may not be meaningful if scales differ)",
+            ]
+        )
+
+        logger.info(
+            f"Validation complete. {' | '.join([m for m in metric_parts if m is not None])}"
+        )
 
         return report
 

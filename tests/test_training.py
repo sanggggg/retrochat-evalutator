@@ -269,7 +269,10 @@ class TestTrainer:
             )
 
             output_dir = Path(tmpdir) / "output"
-            raw_rubrics_map = {"session1": sample_rubric_list.rubrics[:1], "session2": sample_rubric_list.rubrics[1:]}
+            raw_rubrics_map = {
+                "session1": sample_rubric_list.rubrics[:1],
+                "session2": sample_rubric_list.rubrics[1:],
+            }
             result_folder = trainer.save_rubrics(sample_rubric_list, output_dir, raw_rubrics_map)
 
             assert result_folder.exists()

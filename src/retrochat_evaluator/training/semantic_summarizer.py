@@ -48,7 +48,7 @@ class SemanticClusteringSummarizer:
         self.max_rubrics = max_rubrics
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self._embeddings: Optional[GoogleGenerativeAIEmbeddings] = None
-        
+
         # Store clustering results for visualization
         self.last_embeddings: Optional[np.ndarray] = None
         self.last_clusters: Optional[np.ndarray] = None
