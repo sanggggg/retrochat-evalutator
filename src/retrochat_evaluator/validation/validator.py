@@ -95,9 +95,18 @@ class Validator:
         evaluator = self._get_evaluator()
         rubric_list = self._get_rubrics()
 
-        # Get all sessions from manifest
+        # Get validation sessions from manifest
         manifest = loader.load_manifest()
         session_infos = manifest.sessions
+
+        # Filter to validation split only (if available)
+        validation_sessions = [s for s in session_infos if s.split == "validation"]
+        if validation_sessions:
+            session_infos = validation_sessions
+            logger.info(f"Using validation split: {len(session_infos)} sessions")
+        else:
+            logger.warning("No validation split found, using all sessions (legacy dataset?)")
+            # Fall back to all sessions if no split is available
 
         # Filter to sessions that have the specified score
         session_infos = [s for s in session_infos if s.get_score(self.score_name) is not None]

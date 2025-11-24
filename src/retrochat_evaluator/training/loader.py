@@ -18,6 +18,7 @@ class SessionInfo:
     file: str
     scores: dict[str, float]
     metadata: dict[str, Any]
+    split: Optional[str] = None  # "training" or "validation"
 
     def get_score(self, score_name: str) -> float | None:
         """Get a specific score by name.
@@ -57,6 +58,7 @@ class DatasetManifest:
                     file=session_data["file"],
                     scores=scores_data,
                     metadata=session_data.get("metadata", {}),
+                    split=session_data.get("split"),  # "training" or "validation"
                 )
             )
 
@@ -84,12 +86,15 @@ class DatasetLoader:
             logger.info(f"Loaded manifest with {len(self._manifest.sessions)} sessions")
         return self._manifest
 
-    def filter_by_score(self, threshold: float, score_name: str = "default") -> list[SessionInfo]:
+    def filter_by_score(
+        self, threshold: float, score_name: str = "default", split: Optional[str] = None
+    ) -> list[SessionInfo]:
         """Return sessions with score >= threshold for the specified score type.
 
         Args:
             threshold: Minimum score threshold.
             score_name: Name of the score to filter by (default: "default").
+            split: Optional split filter ("training" or "validation"). If None, includes all splits.
 
         Returns:
             List of SessionInfo for qualified sessions.
@@ -97,15 +102,34 @@ class DatasetLoader:
         manifest = self.load_manifest()
         qualified = []
         for s in manifest.sessions:
+            # Filter by split if specified
+            if split is not None and s.split != split:
+                continue
+
             score_value = s.get_score(score_name)
             if score_value is not None and score_value >= threshold:
                 qualified.append(s)
 
+        split_info = f" (split={split})" if split else ""
         logger.info(
             f"Filtered {len(qualified)}/{len(manifest.sessions)} sessions "
-            f"with {score_name} score >= {threshold}"
+            f"with {score_name} score >= {threshold}{split_info}"
         )
         return qualified
+
+    def filter_by_split(self, split: str) -> list[SessionInfo]:
+        """Return sessions for the specified split.
+
+        Args:
+            split: Split name ("training" or "validation").
+
+        Returns:
+            List of SessionInfo for the specified split.
+        """
+        manifest = self.load_manifest()
+        filtered = [s for s in manifest.sessions if s.split == split]
+        logger.info(f"Filtered {len(filtered)}/{len(manifest.sessions)} sessions for split={split}")
+        return filtered
 
     def load_session(self, session_info: SessionInfo) -> ChatSession:
         """Parse session file into ChatSession model.

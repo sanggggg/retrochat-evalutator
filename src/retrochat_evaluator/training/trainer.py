@@ -14,6 +14,8 @@ from ..config import (
     SummarizationLLMConfig,
     SummarizationMethod,
     Config,
+    EvaluationConfig,
+    EvaluationLLMConfig,
 )
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
@@ -21,6 +23,7 @@ from .extractor import RubricExtractor
 from .summarizer import RubricSummarizer
 from .semantic_summarizer import SemanticClusteringSummarizer
 from .visualizer import save_clustering_visualization
+from ..validation.validator import Validator
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,8 @@ class Trainer:
         extraction_llm_config: Optional[ExtractionLLMConfig] = None,
         summarization_llm_config: Optional[SummarizationLLMConfig] = None,
         full_config: Optional[Config] = None,
+        evaluation_config: Optional[EvaluationConfig] = None,
+        evaluation_llm_config: Optional[EvaluationLLMConfig] = None,
     ):
         """Initialize trainer.
 
@@ -48,10 +53,14 @@ class Trainer:
             extraction_llm_config: LLM configuration for rubric extraction.
             summarization_llm_config: LLM configuration for rubric summarization.
             full_config: Full configuration object for metadata (optional).
+            evaluation_config: Evaluation configuration for validation (optional).
+            evaluation_llm_config: LLM configuration for evaluation (optional).
         """
         self.config = config or TrainingConfig()
         self.extraction_llm_config = extraction_llm_config or ExtractionLLMConfig()
         self.summarization_llm_config = summarization_llm_config or SummarizationLLMConfig()
+        self.evaluation_config = evaluation_config
+        self.evaluation_llm_config = evaluation_llm_config
         self.full_config = full_config
         self.prompts_dir = Path(prompts_dir)
 
@@ -129,13 +138,20 @@ class Trainer:
         """
         logger.info("Starting training pipeline")
 
-        # 1. Load and filter sessions
+        # 1. Load and filter sessions (only training split if available)
         logger.info(
-            f"Filtering sessions with {self.config.score_name} score >= {self.config.score_threshold}"
+            f"Filtering training sessions with {self.config.score_name} score >= {self.config.score_threshold}"
         )
+        # If split is available, use only training split; otherwise use all sessions
         qualified_sessions = self.loader.filter_by_score(
-            self.config.score_threshold, self.config.score_name
+            self.config.score_threshold, self.config.score_name, split="training"
         )
+        # If no training sessions found (e.g., old dataset without split), fall back to all
+        if not qualified_sessions:
+            logger.warning("No training split found, using all sessions (legacy dataset?)")
+            qualified_sessions = self.loader.filter_by_score(
+                self.config.score_threshold, self.config.score_name, split=None
+            )
         total_sessions = self.loader.get_session_count()
 
         if not qualified_sessions:
@@ -207,11 +223,13 @@ class Trainer:
         logger.info(f"Training complete. Generated {len(final_rubrics)} rubrics")
         return rubric_list, raw_rubrics_map, chat_sessions
 
-    def save_rubrics(
+    async def save_rubrics(
         self,
         rubrics: RubricList,
         output_path: Path,
         raw_rubrics_map: Optional[dict[str, list[Rubric]]] = None,
+        validate: bool = True,
+        validation_max_sessions: Optional[int] = None,
     ) -> Path:
         """Save rubrics to organized folder structure.
 
@@ -225,6 +243,8 @@ class Trainer:
             rubrics: RubricList to save.
             output_path: Base output directory (will create subfolder).
             raw_rubrics_map: Optional mapping of session_id to extracted rubrics.
+            validate: Whether to perform validation after saving (default: True).
+            validation_max_sessions: Maximum number of sessions to use for validation.
 
         Returns:
             Path to the created training result folder.
@@ -341,5 +361,90 @@ class Trainer:
                 )
             except Exception as e:
                 logger.warning(f"Failed to generate clustering visualization: {e}")
+
+        # 5. Perform validation if requested
+        if validate:
+            try:
+                logger.info("Starting validation of trained rubrics...")
+
+                # Get dataset_dir and manifest_path from loader or full_config
+                dataset_dir = self.loader.dataset_dir
+                manifest_path = self.loader.manifest_path
+
+                # Use evaluation config from full_config if available, otherwise use defaults
+                eval_config = self.evaluation_config
+                eval_llm_config = self.evaluation_llm_config
+
+                if self.full_config:
+                    if eval_config is None:
+                        eval_config = self.full_config.evaluation
+                    if eval_llm_config is None:
+                        eval_llm_config = self.full_config.evaluation_llm
+
+                # Initialize validator
+                validator = Validator(
+                    dataset_dir=dataset_dir,
+                    manifest_path=manifest_path,
+                    rubrics_path=rubrics_path,
+                    prompts_dir=self.prompts_dir,
+                    score_name=self.config.score_name,
+                    config=eval_config,
+                    llm_config=eval_llm_config,
+                )
+
+                # Run validation
+                validation_report = await validator.validate(
+                    max_sessions=validation_max_sessions,
+                )
+
+                # Convert validation report to dict for metadata
+                validation_metrics = validation_report.metrics
+                validation_data = {
+                    "created_at": validation_report.created_at.isoformat(),
+                    "score_name": validation_report.score_name,
+                    "total_sessions": validation_report.total_sessions,
+                    "metrics": {
+                        "mean_absolute_error": validation_metrics.mean_absolute_error,
+                        "root_mean_squared_error": validation_metrics.root_mean_squared_error,
+                        "mean_error": validation_metrics.mean_error,
+                        "std_error": validation_metrics.std_error,
+                        "correlation": validation_metrics.correlation,
+                        "rank_correlation": validation_metrics.rank_correlation,
+                        "r_squared": validation_metrics.r_squared,
+                        "normalized_mae": validation_metrics.normalized_mae,
+                        "normalized_rmse": validation_metrics.normalized_rmse,
+                        "min_error": validation_metrics.min_error,
+                        "max_error": validation_metrics.max_error,
+                    },
+                }
+
+                # Update metadata with validation results
+                metadata["validation"] = validation_data
+
+                # Save updated metadata.json
+                with open(metadata_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                logger.info(f"Updated metadata with validation results at {metadata_path}")
+
+                # Log validation summary
+                metrics = validation_metrics
+                logger.info(
+                    f"Validation complete: "
+                    f"Correlation={metrics.correlation:.4f if metrics.correlation else 'N/A'}, "
+                    f"Rank Correlation={metrics.rank_correlation:.4f if metrics.rank_correlation else 'N/A'}, "
+                    f"R²={metrics.r_squared:.4f if metrics.r_squared else 'N/A'}, "
+                    f"MAE={metrics.mean_absolute_error:.4f}"
+                )
+
+            except Exception as e:
+                logger.warning(f"Validation failed: {e}", exc_info=True)
+                # Add error info to metadata
+                metadata["validation"] = {
+                    "error": str(e),
+                    "status": "failed",
+                }
+                # Save updated metadata with error
+                with open(metadata_path, "w", encoding="utf-8") as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
 
         return result_folder

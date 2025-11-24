@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import random
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -381,6 +382,30 @@ def generate_manifest(input_dir: str, output_file: str, min_size_kb: int = 4):
     print(f"\nProcessed {processed + skipped} files:")
     print(f"  Kept: {processed} files (>= {min_size_kb}KB)")
     print(f"  Skipped: {skipped} files (< {min_size_kb}KB or errors)")
+
+    # Split into training and validation sets (9:1 ratio)
+    if len(sessions) > 0:
+        # Shuffle sessions for random split
+        random.seed(42)  # Fixed seed for reproducibility
+        shuffled_sessions = sessions.copy()
+        random.shuffle(shuffled_sessions)
+
+        # Calculate split point (90% training, 10% validation)
+        split_point = int(len(shuffled_sessions) * 0.9)
+        training_sessions = shuffled_sessions[:split_point]
+        validation_sessions = shuffled_sessions[split_point:]
+
+        # Add split field to each session
+        for session in training_sessions:
+            session["split"] = "training"
+        for session in validation_sessions:
+            session["split"] = "validation"
+
+        print(f"\nSplit sessions:")
+        print(f"  Training: {len(training_sessions)} sessions (90%)")
+        print(f"  Validation: {len(validation_sessions)} sessions (10%)")
+    else:
+        print("\nNo sessions to split")
 
     # Create manifest
     manifest = {"sessions": sessions}

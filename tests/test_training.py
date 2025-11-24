@@ -254,7 +254,8 @@ class TestTrainer:
         assert rubric_list.training_config.sessions_used == 2
         assert isinstance(raw_rubrics_map, dict)
 
-    def test_save_rubrics(self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list):
+    @pytest.mark.asyncio
+    async def test_save_rubrics(self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list):
         """Test saving rubrics to folder structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             prompts_dir = Path(tmpdir) / "prompts"
@@ -273,7 +274,9 @@ class TestTrainer:
                 "session1": sample_rubric_list.rubrics[:1],
                 "session2": sample_rubric_list.rubrics[1:],
             }
-            result_folder = trainer.save_rubrics(sample_rubric_list, output_dir, raw_rubrics_map)
+            result_folder = await trainer.save_rubrics(
+                sample_rubric_list, output_dir, raw_rubrics_map, validate=False
+            )
 
             assert result_folder.exists()
             assert (result_folder / "rubrics.json").exists()

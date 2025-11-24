@@ -330,32 +330,36 @@ def train(
     )
 
     try:
-        with get_usage_metadata_callback() as cb:
-            rubrics, raw_rubrics_map, _ = asyncio.run(trainer.train())
 
-            if not rubrics.rubrics:
-                click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
-                sys.exit(1)
+        async def run_training():
+            with get_usage_metadata_callback() as cb:
+                rubrics, raw_rubrics_map, _ = await trainer.train()
 
-            # Ensure output is a directory (default to ./output)
-            if output is None:
-                output = Path("output")
-            elif output.suffix == ".json":
-                # If user provided a .json file, use its parent directory
-                output = output.parent / "output"
+                if not rubrics.rubrics:
+                    click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
+                    sys.exit(1)
 
-            result_folder = trainer.save_rubrics(rubrics, output, raw_rubrics_map)
-            click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
-            click.echo(f"Saved to: {result_folder}")
+                # Ensure output is a directory (default to ./output)
+                if output is None:
+                    output = Path("output")
+                elif output.suffix == ".json":
+                    # If user provided a .json file, use its parent directory
+                    output = output.parent / "output"
 
-            # Display rubric summary
-            click.echo("\nGenerated Rubrics:")
-            for rubric in rubrics.rubrics:
-                click.echo(f"  - {rubric.id}: {rubric.name}")
+                result_folder = await trainer.save_rubrics(rubrics, output, raw_rubrics_map)
+                click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
+                click.echo(f"Saved to: {result_folder}")
 
-            # Display token usage
-            if cb.usage_metadata:
-                format_token_usage(cb.usage_metadata)
+                # Display rubric summary
+                click.echo("\nGenerated Rubrics:")
+                for rubric in rubrics.rubrics:
+                    click.echo(f"  - {rubric.id}: {rubric.name}")
+
+                # Display token usage
+                if cb.usage_metadata:
+                    format_token_usage(cb.usage_metadata)
+
+        asyncio.run(run_training())
 
     except Exception as e:
         click.echo(f"Error during training: {e}", err=True)
