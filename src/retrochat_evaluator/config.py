@@ -91,7 +91,10 @@ class TrainingConfig:
 
     # Semantic clustering configuration (used when summarization_method == SEMANTIC_CLUSTERING)
     embedding_model: str = "models/text-embedding-004"
-    similarity_threshold: float = 0.75
+    umap_n_neighbors: int = 15
+    umap_n_components: int = 5
+    umap_metric: str = "cosine"
+    min_cluster_size: int = 2
 
 
 @dataclass

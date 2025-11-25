@@ -4,9 +4,10 @@ import logging
 import os
 from typing import Optional
 
+import hdbscan
 import numpy as np
+import umap.umap_ as umap
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from sklearn.cluster import DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity
 
 from ..models.rubric import Rubric
@@ -19,41 +20,49 @@ class SemanticClusteringSummarizer:
 
     This approach uses:
     1. Text embedding via Google AI (text-embedding-004) to convert rubrics to vectors
-    2. DBSCAN (Density-Based Spatial Clustering) to group similar rubrics
-    3. Cluster size as frequency metric
-    4. Centroid-based representative selection
+    2. UMAP (Uniform Manifold Approximation and Projection) for dimensionality reduction
+    3. HDBSCAN (Hierarchical Density-Based Spatial Clustering) to group similar rubrics
+    4. Cluster size as frequency metric
+    5. Centroid-based representative selection
     """
 
     def __init__(
         self,
         embedding_model: str = "models/text-embedding-004",
-        similarity_threshold: float = 0.75,
+        umap_n_neighbors: int = 15,
+        umap_n_components: int = 5,
+        umap_metric: str = "cosine",
+        min_cluster_size: int = 2,
         min_rubrics: int = 5,
         max_rubrics: int = 10,
-        min_samples: int = 2,
         api_key: Optional[str] = None,
     ):
         """Initialize semantic clustering summarizer.
 
         Args:
             embedding_model: Google AI embedding model name.
-            similarity_threshold: Cosine similarity threshold for clustering (0-1).
-                Converted to eps (distance) for DBSCAN: eps = 1 - similarity_threshold.
+            umap_n_neighbors: Number of neighbors for UMAP. Controls local vs global structure.
+                Lower values focus on local structure, higher on global.
+            umap_n_components: Target dimensionality for UMAP reduction.
+            umap_metric: Distance metric for UMAP (default: cosine for semantic similarity).
+            min_cluster_size: Minimum cluster size for HDBSCAN.
             min_rubrics: Minimum number of rubrics to output.
             max_rubrics: Maximum number of rubrics to output.
-            min_samples: Minimum samples in a neighborhood for DBSCAN core points.
             api_key: Google API key. If not provided, uses GOOGLE_API_KEY env var.
         """
         self.embedding_model = embedding_model
-        self.similarity_threshold = similarity_threshold
+        self.umap_n_neighbors = umap_n_neighbors
+        self.umap_n_components = umap_n_components
+        self.umap_metric = umap_metric
+        self.min_cluster_size = min_cluster_size
         self.min_rubrics = min_rubrics
         self.max_rubrics = max_rubrics
-        self.min_samples = min_samples
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self._embeddings: Optional[GoogleGenerativeAIEmbeddings] = None
 
         # Store clustering results for visualization
         self.last_embeddings: Optional[np.ndarray] = None
+        self.last_umap_embeddings: Optional[np.ndarray] = None
         self.last_clusters: Optional[np.ndarray] = None
         self.last_all_rubrics: Optional[list[Rubric]] = None
         self.last_cluster_info: Optional[dict[int, dict]] = None
@@ -99,7 +108,7 @@ class SemanticClusteringSummarizer:
         embeddings = await self._generate_embeddings(texts)
 
         # Step 2: Perform clustering
-        clusters = self._cluster_embeddings(embeddings)
+        clusters, umap_embeddings = self._cluster_embeddings(embeddings)
 
         # Step 3: Calculate cluster statistics
         cluster_info = self._analyze_clusters(clusters, all_rubrics, embeddings)
@@ -109,6 +118,7 @@ class SemanticClusteringSummarizer:
 
         # Store clustering results for visualization
         self.last_embeddings = embeddings
+        self.last_umap_embeddings = umap_embeddings
         self.last_clusters = clusters
         self.last_all_rubrics = all_rubrics
         self.last_cluster_info = cluster_info
@@ -145,31 +155,49 @@ class SemanticClusteringSummarizer:
         embeddings = await client.aembed_documents(texts)
         return np.array(embeddings)
 
-    def _cluster_embeddings(self, embeddings: np.ndarray) -> np.ndarray:
-        """Cluster embeddings using DBSCAN.
+    def _cluster_embeddings(self, embeddings: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Cluster embeddings using UMAP + HDBSCAN.
 
-        Uses cosine distance (1 - similarity) as the metric.
+        First reduces dimensionality with UMAP, then clusters with HDBSCAN.
+
+        Returns:
+            Tuple of (cluster_labels, umap_embeddings)
         """
         n_samples = len(embeddings)
 
-        # Convert similarity threshold to eps (distance threshold)
-        # distance = 1 - cosine_similarity
-        eps = 1 - self.similarity_threshold
-
+        # Step 1: Dimensionality reduction with UMAP
         logger.info(
-            f"Clustering with DBSCAN eps={eps:.3f} "
-            f"(similarity_threshold={self.similarity_threshold:.3f}), "
-            f"min_samples={self.min_samples}"
+            f"Reducing dimensionality with UMAP: "
+            f"n_neighbors={self.umap_n_neighbors}, "
+            f"n_components={self.umap_n_components}, "
+            f"metric={self.umap_metric}"
         )
 
-        # Use DBSCAN with cosine metric
-        clustering = DBSCAN(
-            eps=eps,
-            min_samples=self.min_samples,
-            metric="cosine",
+        # Adjust n_neighbors if we have fewer samples
+        n_neighbors = min(self.umap_n_neighbors, n_samples - 1)
+        if n_neighbors < 2:
+            n_neighbors = 2
+
+        reducer = umap.UMAP(
+            n_neighbors=n_neighbors,
+            n_components=self.umap_n_components,
+            metric=self.umap_metric,
+            random_state=42,
+        )
+        umap_embeddings = reducer.fit_transform(embeddings)
+
+        # Step 2: Clustering with HDBSCAN
+        logger.info(
+            f"Clustering with HDBSCAN: "
+            f"min_cluster_size={self.min_cluster_size}"
         )
 
-        clusters = clustering.fit_predict(embeddings)
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=self.min_cluster_size,
+            metric="euclidean",
+            cluster_selection_method="eom",
+        )
+        clusters = clusterer.fit_predict(umap_embeddings)
 
         # Count clusters (excluding noise points labeled as -1)
         unique_clusters = set(clusters)
@@ -180,7 +208,7 @@ class SemanticClusteringSummarizer:
             f"Found {n_clusters} clusters and {n_noise} noise points from {n_samples} rubrics"
         )
 
-        return clusters
+        return clusters, umap_embeddings
 
     def _analyze_clusters(
         self,
@@ -330,9 +358,9 @@ class SemanticClusteringSummarizer:
             f"Semantic clustering consolidation:",
             f"- Input: {total_input} rubrics from extraction",
             f"- Output: {total_output} clustered rubrics",
-            f"- Clustering method: DBSCAN",
-            f"- Similarity threshold (eps): {self.similarity_threshold}",
-            f"- Min samples: {self.min_samples}",
+            f"- Clustering method: UMAP + HDBSCAN",
+            f"- UMAP parameters: n_neighbors={self.umap_n_neighbors}, n_components={self.umap_n_components}, metric={self.umap_metric}",
+            f"- HDBSCAN min_cluster_size: {self.min_cluster_size}",
             f"- Embedding model: {self.embedding_model}",
             f"- Total clusters found: {len(cluster_info)}",
             f"- Selected cluster sizes: {cluster_sizes}",

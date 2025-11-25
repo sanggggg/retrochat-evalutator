@@ -131,10 +131,12 @@ class Trainer:
         if self._semantic_summarizer is None:
             self._semantic_summarizer = SemanticClusteringSummarizer(
                 embedding_model=self.config.embedding_model,
-                similarity_threshold=self.config.similarity_threshold,
+                umap_n_neighbors=self.config.umap_n_neighbors,
+                umap_n_components=self.config.umap_n_components,
+                umap_metric=self.config.umap_metric,
+                min_cluster_size=self.config.min_cluster_size,
                 min_rubrics=self.config.min_rubrics,
                 max_rubrics=self.config.max_rubrics,
-                min_samples=max(self.config.min_rubrics, 2),
             )
         return self._semantic_summarizer
 
@@ -370,6 +372,7 @@ class Trainer:
                     self._semantic_summarizer.last_clusters,
                     self._semantic_summarizer.last_all_rubrics,
                     self._semantic_summarizer.last_cluster_info,
+                    umap_embeddings=self._semantic_summarizer.last_umap_embeddings,
                 )
             except Exception as e:
                 logger.warning(f"Failed to generate clustering visualization: {e}")

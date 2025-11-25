@@ -9,7 +9,7 @@ import pytest
 
 from retrochat_evaluator.training.loader import DatasetLoader, DatasetManifest
 from retrochat_evaluator.training.extractor import RubricExtractor
-from retrochat_evaluator.training.summarizer import RubricSummarizer
+from retrochat_evaluator.training.llm_summarizer import RubricSummarizer
 from retrochat_evaluator.training.semantic_summarizer import SemanticClusteringSummarizer
 from retrochat_evaluator.training.trainer import Trainer
 from retrochat_evaluator.models.rubric import Rubric
@@ -501,7 +501,9 @@ class TestSemanticClusteringSummarizer:
 
         summarizer = SemanticClusteringSummarizer(
             embedding_model="models/text-embedding-004",
-            similarity_threshold=0.6,  # Lower threshold for testing
+            umap_n_neighbors=3,
+            umap_n_components=2,
+            min_cluster_size=2,
             min_rubrics=2,
             max_rubrics=5,
         )
@@ -526,7 +528,9 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            similarity_threshold=0.5,
+            umap_n_neighbors=3,
+            umap_n_components=2,
+            min_cluster_size=2,
             min_rubrics=1,
             max_rubrics=2,
         )
@@ -546,20 +550,23 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            similarity_threshold=0.99,  # Very high threshold = each item is its own cluster
+            umap_n_neighbors=3,
+            umap_n_components=3,
+            min_cluster_size=2,
             min_rubrics=3,
             max_rubrics=10,
         )
 
-        # Create very distinct embeddings so each item is its own cluster
-        distinct_embeddings = np.eye(7)  # 7 rubrics, each with unique direction
+        # Create very distinct embeddings (7 rubrics with high-dimensional distinct vectors)
+        # Use larger embedding dimension to avoid UMAP issues
+        distinct_embeddings = np.eye(7, 10)  # 7 rubrics, 10-dimensional space
 
         with patch.object(
             summarizer, "_generate_embeddings", new=AsyncMock(return_value=distinct_embeddings)
         ):
             final_rubrics, notes = await summarizer.summarize(similar_rubrics)
 
-        # With very high threshold, should have at least min_rubrics clusters
+        # Should have at least min_rubrics clusters
         assert len(final_rubrics) >= 3
 
     @pytest.mark.asyncio
@@ -596,7 +603,9 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            similarity_threshold=0.5,
+            umap_n_neighbors=3,
+            umap_n_components=2,
+            min_cluster_size=2,
             min_rubrics=2,
             max_rubrics=5,
         )
@@ -617,13 +626,15 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            similarity_threshold=0.8,  # High threshold - only very similar items cluster
+            umap_n_neighbors=2,
+            umap_n_components=1,  # Use 1 component to avoid UMAP issues with 3 samples
+            min_cluster_size=2,
             min_rubrics=1,
             max_rubrics=10,
         )
 
-        # Create very distinct embeddings for diverse rubrics
-        distinct_embeddings = np.eye(3)  # 3 diverse rubrics
+        # Create very distinct embeddings for diverse rubrics (3 rubrics in 10D space)
+        distinct_embeddings = np.eye(3, 10)  # 3 diverse rubrics, 10-dimensional
 
         with patch.object(
             summarizer, "_generate_embeddings", new=AsyncMock(return_value=distinct_embeddings)
@@ -640,7 +651,9 @@ class TestSemanticClusteringSummarizer:
 
         summarizer = SemanticClusteringSummarizer(
             embedding_model="models/text-embedding-004",
-            similarity_threshold=0.75,
+            umap_n_neighbors=3,
+            umap_n_components=2,
+            min_cluster_size=2,
         )
 
         mock_embedding_array = np.array([mock_embeddings[i] for i in range(7)])
@@ -652,7 +665,7 @@ class TestSemanticClusteringSummarizer:
 
         assert "Input:" in notes
         assert "Output:" in notes
-        assert "DBSCAN" in notes
+        assert "HDBSCAN" in notes
         assert "text-embedding-004" in notes
 
 
@@ -698,7 +711,9 @@ class TestTrainerWithSemanticClustering:
             score_top_percentile=50.0,
             score_name="efficiency",
             summarization_method=SummarizationMethod.SEMANTIC_CLUSTERING,
-            similarity_threshold=0.6,
+            umap_n_neighbors=3,
+            umap_n_components=2,
+            min_cluster_size=2,
             min_rubrics=1,
             max_rubrics=5,
         )

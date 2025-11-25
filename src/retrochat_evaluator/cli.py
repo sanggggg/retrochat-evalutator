@@ -1,8 +1,10 @@
 """CLI entry points for Retrochat Evaluator."""
 
 import asyncio
+import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -10,11 +12,15 @@ from dotenv import load_dotenv
 from langchain_core.callbacks import get_usage_metadata_callback
 
 from .config import Config, TrainingConfig, EvaluationConfig, SummarizationMethod
-from .models.rubric import RubricList
+from .models.rubric import RubricList, Rubric
 from .models.chat_session import ChatSession
 from .training.trainer import Trainer
+from .training.llm_summarizer import RubricSummarizer
+from .training.semantic_summarizer import SemanticClusteringSummarizer
+from .training.visualizer import save_clustering_visualization
 from .evaluation.evaluator import Evaluator
 from .validation.validator import Validator
+from .llm.gemini import GeminiClient
 
 
 def setup_logging(verbose: bool) -> None:
@@ -214,10 +220,22 @@ def main(ctx: click.Context, verbose: bool) -> None:
     help="Google AI embedding model for semantic clustering (default: models/text-embedding-004)",
 )
 @click.option(
-    "--similarity-threshold",
-    type=float,
+    "--umap-n-neighbors",
+    type=int,
     default=None,
-    help="Cosine similarity threshold for clustering (0-1, default: 0.75)",
+    help="UMAP n_neighbors for semantic clustering (default: 15)",
+)
+@click.option(
+    "--umap-n-components",
+    type=int,
+    default=None,
+    help="UMAP n_components for semantic clustering (default: 5)",
+)
+@click.option(
+    "--min-cluster-size",
+    type=int,
+    default=None,
+    help="HDBSCAN min_cluster_size for semantic clustering (default: 2)",
 )
 @click.option(
     "--min-rubrics",
@@ -243,7 +261,9 @@ def train(
     prompts_dir: Path | None,
     summarization_method: str | None,
     embedding_model: str | None,
-    similarity_threshold: float | None,
+    umap_n_neighbors: int | None,
+    umap_n_components: int | None,
+    min_cluster_size: int | None,
     min_rubrics: int | None,
     max_rubrics: int | None,
 ) -> None:
@@ -267,8 +287,12 @@ def train(
         training_config.summarization_method = SummarizationMethod(summarization_method.lower())
     if embedding_model is not None:
         training_config.embedding_model = embedding_model
-    if similarity_threshold is not None:
-        training_config.similarity_threshold = similarity_threshold
+    if umap_n_neighbors is not None:
+        training_config.umap_n_neighbors = umap_n_neighbors
+    if umap_n_components is not None:
+        training_config.umap_n_components = umap_n_components
+    if min_cluster_size is not None:
+        training_config.min_cluster_size = min_cluster_size
     if min_rubrics is not None:
         training_config.min_rubrics = min_rubrics
     if max_rubrics is not None:
@@ -736,6 +760,267 @@ def validate(
         if ctx.obj.get("verbose"):
             import traceback
 
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@main.command()
+@click.argument(
+    "raw_rubrics",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Path to YAML config file (optional, uses defaults if not provided)",
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output directory for rubrics.json (defaults to same directory as raw-rubrics.json)",
+)
+@click.option(
+    "--method",
+    type=click.Choice(["llm", "cluster", "both"], case_sensitive=False),
+    default="both",
+    help="Summarization method: 'llm' (LLM only), 'cluster' (clustering only), or 'both' (default)",
+)
+@click.option(
+    "--min-rubrics",
+    type=int,
+    default=None,
+    help="Minimum number of rubrics in final list (overrides config)",
+)
+@click.option(
+    "--max-rubrics",
+    type=int,
+    default=None,
+    help="Maximum number of rubrics in final list (overrides config)",
+)
+@click.option(
+    "--prompts-dir",
+    "-p",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Directory containing prompt templates (defaults to prompts/)",
+)
+@click.option(
+    "--embedding-model",
+    type=str,
+    default=None,
+    help="Embedding model for clustering (overrides config)",
+)
+@click.option(
+    "--umap-n-neighbors",
+    type=int,
+    default=None,
+    help="UMAP n_neighbors parameter for clustering (overrides config)",
+)
+@click.option(
+    "--umap-n-components",
+    type=int,
+    default=None,
+    help="UMAP n_components parameter for clustering (overrides config)",
+)
+@click.option(
+    "--min-cluster-size",
+    type=int,
+    default=None,
+    help="HDBSCAN min_cluster_size parameter for clustering (overrides config)",
+)
+@click.pass_context
+def summarize(
+    ctx: click.Context,
+    raw_rubrics: Path,
+    config: Path | None,
+    output_dir: Path | None,
+    method: str,
+    min_rubrics: int | None,
+    max_rubrics: int | None,
+    prompts_dir: Path | None,
+    embedding_model: str | None,
+    umap_n_neighbors: int | None,
+    umap_n_components: int | None,
+    min_cluster_size: int | None,
+) -> None:
+    """Run LLM and/or clustering summarizers on raw rubrics.
+
+    Takes a raw-rubrics.json file (typically from training output) and runs
+    one or both summarization methods on it. Useful for comparing different
+    summarization approaches without re-running rubric extraction.
+
+    Outputs:
+    - rubrics_llm.json (if method is 'llm' or 'both')
+    - rubrics_cluster.json (if method is 'cluster' or 'both')
+    """
+    # Load config
+    if config:
+        cfg = Config.from_yaml(config)
+        click.echo(f"Loaded config from: {config}")
+    else:
+        cfg = Config.from_env()
+
+    # Determine output directory
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = raw_rubrics.parent
+
+    # Determine prompts directory
+    if prompts_dir:
+        prompts_dir = prompts_dir
+    else:
+        prompts_dir = cfg.prompts_dir
+
+    # Override config values from command line
+    min_rubrics_val = min_rubrics if min_rubrics is not None else cfg.training.min_rubrics
+    max_rubrics_val = max_rubrics if max_rubrics is not None else cfg.training.max_rubrics
+    embedding_model_val = embedding_model if embedding_model is not None else cfg.training.embedding_model
+    umap_n_neighbors_val = umap_n_neighbors if umap_n_neighbors is not None else cfg.training.umap_n_neighbors
+    umap_n_components_val = umap_n_components if umap_n_components is not None else cfg.training.umap_n_components
+    min_cluster_size_val = min_cluster_size if min_cluster_size is not None else cfg.training.min_cluster_size
+
+    click.echo(f"Summarization settings: min_rubrics={min_rubrics_val}, max_rubrics={max_rubrics_val}")
+    click.echo(f"Method: {method}")
+    if method.lower() in ["cluster", "both"]:
+        click.echo(f"Clustering settings: embedding_model={embedding_model_val}, "
+                   f"umap_n_neighbors={umap_n_neighbors_val}, "
+                   f"umap_n_components={umap_n_components_val}, "
+                   f"min_cluster_size={min_cluster_size_val}")
+
+    # Load raw rubrics
+    def load_raw_rubrics(raw_rubrics_path: Path) -> list[list[Rubric]]:
+        """Load raw rubrics from JSON file and convert to list of Rubric lists."""
+        with open(raw_rubrics_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+
+        rubric_lists = []
+        for session_id, rubric_dicts in raw_data.items():
+            rubrics = []
+            for rubric_dict in rubric_dicts:
+                try:
+                    rubric = Rubric(**rubric_dict)
+                    rubrics.append(rubric)
+                except Exception as e:
+                    click.echo(f"Warning: Failed to parse rubric from session {session_id}: {e}", err=True)
+                    continue
+            if rubrics:
+                rubric_lists.append(rubrics)
+
+        total_rubrics = sum(len(r) for r in rubric_lists)
+        click.echo(f"Loaded {len(rubric_lists)} sessions with {total_rubrics} total rubrics from {raw_rubrics_path}")
+        return rubric_lists
+
+    try:
+        rubric_lists = load_raw_rubrics(raw_rubrics)
+
+        if not rubric_lists:
+            click.echo("Error: No rubrics found in raw-rubrics.json file", err=True)
+            sys.exit(1)
+
+        async def run_summarization():
+            llm_rubrics, llm_notes = [], ""
+            cluster_rubrics, cluster_notes = [], ""
+
+            # Initialize and run summarizers based on method
+            if method.lower() in ["llm", "both"]:
+                click.echo("Initializing LLM summarizer...")
+                llm_client = GeminiClient(
+                    cfg.summarization_llm,
+                    rate_limiter_config=cfg.rate_limiter,
+                )
+                llm_summarizer = RubricSummarizer(
+                    llm_client=llm_client,
+                    prompt_template_path=Path("rubric_summarizer.txt"),
+                    prompts_dir=prompts_dir,
+                    min_rubrics=min_rubrics_val,
+                    max_rubrics=max_rubrics_val,
+                )
+
+            if method.lower() in ["cluster", "both"]:
+                click.echo("Initializing clustering summarizer...")
+                cluster_summarizer = SemanticClusteringSummarizer(
+                    embedding_model=embedding_model_val,
+                    umap_n_neighbors=umap_n_neighbors_val,
+                    umap_n_components=umap_n_components_val,
+                    min_cluster_size=min_cluster_size_val,
+                    min_rubrics=min_rubrics_val,
+                    max_rubrics=max_rubrics_val,
+                )
+
+            # Run summarizations
+            if method.lower() == "both":
+                click.echo("Starting summarization (both LLM and Clustering)...")
+                import asyncio as aio
+                llm_task = aio.create_task(llm_summarizer.summarize(rubric_lists))
+                cluster_task = aio.create_task(cluster_summarizer.summarize(rubric_lists))
+                (llm_rubrics, llm_notes), (cluster_rubrics, cluster_notes) = await aio.gather(
+                    llm_task, cluster_task
+                )
+            elif method.lower() == "llm":
+                click.echo("Starting LLM summarization...")
+                llm_rubrics, llm_notes = await llm_summarizer.summarize(rubric_lists)
+            elif method.lower() == "cluster":
+                click.echo("Starting clustering summarization...")
+                cluster_rubrics, cluster_notes = await cluster_summarizer.summarize(rubric_lists)
+
+            # Save results
+            if method.lower() in ["llm", "both"] and llm_rubrics:
+                click.echo(f"LLM summarization complete. Generated {len(llm_rubrics)} final rubrics")
+                llm_rubric_list = RubricList(
+                    version="1.0",
+                    created_at=datetime.utcnow(),
+                    training_config=None,
+                    rubrics=llm_rubrics,
+                    consolidation_notes=llm_notes,
+                )
+                llm_output_path = output_dir / "rubrics_llm.json"
+                llm_rubric_list.to_json(llm_output_path)
+                click.echo(f"Saved LLM rubrics to {llm_output_path}")
+
+            if method.lower() in ["cluster", "both"] and cluster_rubrics:
+                click.echo(f"Clustering summarization complete. Generated {len(cluster_rubrics)} final rubrics")
+                cluster_rubric_list = RubricList(
+                    version="1.0",
+                    created_at=datetime.utcnow(),
+                    training_config=None,
+                    rubrics=cluster_rubrics,
+                    consolidation_notes=cluster_notes,
+                )
+                cluster_output_path = output_dir / "rubrics_cluster.json"
+                cluster_rubric_list.to_json(cluster_output_path)
+                click.echo(f"Saved clustering rubrics to {cluster_output_path}")
+
+                # Generate visualization if clustering data is available
+                if (
+                    cluster_summarizer.last_embeddings is not None
+                    and cluster_summarizer.last_clusters is not None
+                    and cluster_summarizer.last_all_rubrics is not None
+                ):
+                    try:
+                        save_clustering_visualization(
+                            output_dir,
+                            cluster_summarizer.last_embeddings,
+                            cluster_summarizer.last_clusters,
+                            cluster_summarizer.last_all_rubrics,
+                            cluster_summarizer.last_cluster_info,
+                            umap_embeddings=cluster_summarizer.last_umap_embeddings,
+                        )
+                        click.echo(f"Saved clustering visualization to {output_dir}/clustering_visualization.png")
+                    except Exception as e:
+                        click.echo(f"Warning: Failed to generate clustering visualization: {e}", err=True)
+
+        asyncio.run(run_summarization())
+        click.echo(f"Done! Summarization complete using method: {method}")
+
+    except Exception as e:
+        click.echo(f"Error during summarization: {e}", err=True)
+        if ctx.obj.get("verbose"):
+            import traceback
             traceback.print_exc()
         sys.exit(1)
 

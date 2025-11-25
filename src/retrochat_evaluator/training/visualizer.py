@@ -22,36 +22,46 @@ def save_clustering_visualization(
     clusters: np.ndarray,
     all_rubrics: list[Rubric],
     cluster_info: Optional[dict[int, dict]] = None,
+    umap_embeddings: Optional[np.ndarray] = None,
 ) -> None:
     """Generate and save 2D visualization of clustering results.
 
     Args:
         result_folder: Output directory for the visualization.
-        embeddings: Embedding vectors for all rubrics.
+        embeddings: Original high-dimensional embedding vectors.
         clusters: Cluster labels for each rubric.
         all_rubrics: List of all rubrics.
         cluster_info: Optional cluster information dictionary.
+        umap_embeddings: Optional UMAP-reduced embeddings (preferred for visualization if available).
     """
     logger.info("Generating clustering visualization...")
 
+    # Prefer UMAP embeddings if available (already dimensionality-reduced and structure-preserving)
+    source_embeddings = umap_embeddings if umap_embeddings is not None else embeddings
+    method_name = "UMAP" if umap_embeddings is not None else "original"
+
+    logger.info(f"Using {method_name} embeddings (shape: {source_embeddings.shape}) for visualization")
+
     # Reduce dimensions to 2D using t-SNE
-    if len(embeddings) < 2:
+    if len(source_embeddings) < 2:
         logger.warning("Not enough data points for visualization (need at least 2)")
         return
 
     # Use t-SNE for dimensionality reduction
     # For small datasets, use smaller perplexity
-    perplexity = min(30, max(5, len(embeddings) - 1))
+    perplexity = min(30, max(5, len(source_embeddings) - 1))
 
     try:
-        tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity, n_iter=1000)
-        embeddings_2d = tsne.fit_transform(embeddings)
+        tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity, max_iter=1000)
+        embeddings_2d = tsne.fit_transform(source_embeddings)
+        reduction_method = "t-SNE"
     except Exception as e:
         logger.warning(f"t-SNE failed, trying PCA: {e}")
         from sklearn.decomposition import PCA
 
         pca = PCA(n_components=2, random_state=42)
-        embeddings_2d = pca.fit_transform(embeddings)
+        embeddings_2d = pca.fit_transform(source_embeddings)
+        reduction_method = "PCA"
 
     # Create figure
     fig, ax = plt.subplots(figsize=(12, 10))
@@ -103,8 +113,9 @@ def save_clustering_visualization(
     ax.set_xlabel("Dimension 1", fontsize=12)
     ax.set_ylabel("Dimension 2", fontsize=12)
     ax.set_title(
-        f"Semantic Clustering Visualization\n"
-        f"{len(all_rubrics)} rubrics grouped into {n_clusters} clusters",
+        f"Semantic Clustering Visualization (UMAP + HDBSCAN)\n"
+        f"{len(all_rubrics)} rubrics grouped into {n_clusters} clusters\n"
+        f"Dimensionality reduction: {method_name} → {reduction_method}",
         fontsize=14,
         fontweight="bold",
     )
