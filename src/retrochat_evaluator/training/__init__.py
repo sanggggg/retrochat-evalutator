@@ -2,7 +2,7 @@
 
 from .loader import DatasetLoader
 from .extractor import RubricExtractor
-from .summarizer import RubricSummarizer
+from .llm_summarizer import RubricSummarizer
 from .trainer import Trainer
 
 __all__ = [

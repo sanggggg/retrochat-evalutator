@@ -1,4 +1,4 @@
-"""Rubric summarizer for consolidating extracted rubrics."""
+"""LLM-backed rubric summarizer with hierarchical batching."""
 
 import json
 import logging
@@ -23,6 +23,7 @@ class RubricSummarizer:
         prompts_dir: Optional[Path] = None,
         min_rubrics: int = 5,
         max_rubrics: int = 10,
+        max_batch_size: int = 100,
     ):
         """Initialize rubric summarizer.
 
@@ -32,11 +33,13 @@ class RubricSummarizer:
             prompts_dir: Base directory for prompts.
             min_rubrics: Minimum number of rubrics in final list.
             max_rubrics: Maximum number of rubrics in final list.
+            max_batch_size: Maximum number of rubrics to send to the LLM at once.
         """
         self.llm = llm_client
         self.prompt_template = load_prompt_template(prompt_template_path, prompts_dir)
         self.min_rubrics = min_rubrics
         self.max_rubrics = max_rubrics
+        self.max_batch_size = max_batch_size
 
     async def summarize(self, rubric_lists: list[list[Rubric]]) -> tuple[list[Rubric], str]:
         """Consolidate rubrics into final list.
@@ -47,20 +50,72 @@ class RubricSummarizer:
         Returns:
             Tuple of (final rubrics list, consolidation notes).
         """
-        all_rubrics = self._flatten_and_format(rubric_lists)
+        collected = self._collect_rubrics(rubric_lists)
+        total_rubrics = len(collected)
+
+        if total_rubrics == 0:
+            logger.info("No rubrics provided for summarization")
+            return [], ""
+
+        if total_rubrics >= self.max_batch_size:
+            logger.info(
+                "Summarizing %s rubrics in batches of %s",
+                total_rubrics,
+                self.max_batch_size,
+            )
+            aggregated: RubricList = []
+            notes: list[str] = []
+
+            for batch_idx, chunk in enumerate(
+                self._chunk_rubrics(collected, self.max_batch_size), 1
+            ):
+                logger.debug(
+                    "Processing rubric chunk %s with %s entries", batch_idx, len(chunk)
+                )
+                chunk_rubrics, chunk_notes = await self._summarize_batch(chunk)
+                aggregated.extend(chunk_rubrics)
+                if chunk_notes:
+                    notes.append(chunk_notes)
+
+            if not aggregated:
+                return [], "\n\n".join(notes).strip()
+
+            final_rubrics, final_notes = await self.summarize([aggregated])
+            if final_notes:
+                notes.append(final_notes)
+
+            combined_notes = "\n\n".join(notes).strip()
+            return final_rubrics, combined_notes
+
+        return await self._summarize_batch(collected)
+
+    async def _summarize_batch(self, rubrics: RubricList) -> tuple[list[Rubric], str]:
+        """Send a single batch of rubrics to the LLM for consolidation."""
         prompt = format_prompt(
             self.prompt_template,
-            all_rubrics=all_rubrics,
+            all_rubrics=self._format_rubrics_for_prompt([rubrics]),
             summarization_min_rubrics=self.min_rubrics,
             summarization_max_rubrics=self.max_rubrics,
         )
 
-        logger.info(f"Summarizing {sum(len(r) for r in rubric_lists)} rubrics from extraction")
+        logger.info("Summarizing batch of %s rubrics", len(rubrics))
         response = await self.llm.generate(prompt)
 
         return self._parse_final_rubrics(response)
 
-    def _flatten_and_format(self, rubric_lists: list[list[Rubric]]) -> str:
+    def _collect_rubrics(self, rubric_lists: list[list[Rubric]]) -> RubricList:
+        """Flatten nested rubric lists into a single list."""
+        collected: RubricList = []
+        for rubrics in rubric_lists:
+            if rubrics:
+                collected.extend(rubrics)
+        return collected
+
+    def _chunk_rubrics(self, rubrics: RubricList, chunk_size: int) -> list[RubricList]:
+        """Split rubrics into evenly-sized chunks for hierarchical summarization."""
+        return [rubrics[i : i + chunk_size] for i in range(0, len(rubrics), chunk_size)]
+
+    def _format_rubrics_for_prompt(self, rubric_lists: list[list[Rubric]]) -> str:
         """Combine all rubrics into formatted string for prompt.
 
         Args:

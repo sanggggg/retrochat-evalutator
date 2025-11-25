@@ -21,7 +21,7 @@ from ..config import (
 from ..llm.gemini import GeminiClient
 from .loader import DatasetLoader
 from .extractor import RubricExtractor
-from .summarizer import RubricSummarizer
+from .llm_summarizer import RubricSummarizer
 from .semantic_summarizer import SemanticClusteringSummarizer
 from .visualizer import save_clustering_visualization
 
