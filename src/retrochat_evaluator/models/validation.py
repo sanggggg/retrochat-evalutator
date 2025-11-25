@@ -10,6 +10,15 @@ import math
 from pydantic import BaseModel, Field
 
 
+class SessionRubricScore(BaseModel):
+    """Score information for a single rubric within session validation results."""
+
+    rubric_id: str = Field(..., description="ID of the rubric")
+    rubric_name: str = Field(..., description="Human-readable rubric name")
+    score: float = Field(..., description="Score predicted for this rubric")
+    max_score: float = Field(..., description="Maximum possible score for this rubric")
+
+
 class SessionValidationResult(BaseModel):
     """Validation result for a single session."""
 
@@ -17,51 +26,50 @@ class SessionValidationResult(BaseModel):
     file: str = Field(..., description="Filename of the session")
     predicted_score: float = Field(..., description="Score predicted by LLM evaluation")
     real_score: float = Field(..., description="Actual score from manifest")
-    error: float = Field(..., description="Difference: predicted - real")
+    real_percentile: float = Field(
+        ..., description="Percentile rank (0-100) of real score among all real scores"
+    )
+    error: float = Field(
+        ..., description="Difference: predicted_score - real_percentile (note: different scales)"
+    )
     absolute_error: float = Field(..., description="Absolute difference")
     squared_error: float = Field(..., description="Squared difference")
+    rubric_scores: list[SessionRubricScore] = Field(
+        default_factory=list,
+        description="Per-rubric scores used to compute the predicted score",
+    )
 
 
 class ValidationMetrics(BaseModel):
     """Statistical metrics for validation.
 
-    Note: When real scores and predicted scores have different scales (e.g., real scores
-    have wide range while predicted scores are 1-5), absolute error metrics (MAE, RMSE)
-    may not be meaningful. Use scale-independent metrics like correlation and rank correlation instead.
+    Compares predicted_score (raw LLM scores) against real_percentile (0-100).
+    Since scales differ, use correlation metrics for meaningful comparison.
     """
 
-    # Absolute error metrics - may not be meaningful if score scales differ
+    # Error metrics (note: predicted_score and real_percentile have different scales)
     mean_absolute_error: float = Field(
         ...,
-        description="Mean Absolute Error (MAE). Note: May not be meaningful if score scales differ significantly.",
+        description="Mean Absolute Error (MAE). Note: scales differ between predicted_score and real_percentile.",
     )
     root_mean_squared_error: float = Field(
         ...,
-        description="Root Mean Squared Error (RMSE). Note: May not be meaningful if score scales differ significantly.",
+        description="Root Mean Squared Error (RMSE). Note: scales differ.",
     )
     mean_error: float = Field(..., description="Mean Error (bias)")
     std_error: Optional[float] = Field(default=None, description="Standard deviation of errors")
 
-    # Scale-independent metrics (recommended when scales differ)
+    # Correlation metrics (scale-independent, recommended)
     correlation: Optional[float] = Field(
-        default=None, description="Pearson correlation coefficient (scale-independent)"
+        default=None,
+        description="Pearson correlation between predicted_score and real_percentile",
     )
     rank_correlation: Optional[float] = Field(
         default=None,
-        description="Spearman rank correlation coefficient (scale-independent, recommended)",
+        description="Spearman rank correlation (recommended, scale-independent)",
     )
     r_squared: Optional[float] = Field(
         default=None, description="R-squared (coefficient of determination)"
-    )
-
-    # Normalized error metrics (Min-Max normalization applied)
-    normalized_mae: Optional[float] = Field(
-        default=None,
-        description="Normalized MAE after Min-Max scaling to [0,1]. Only meaningful when score scales differ.",
-    )
-    normalized_rmse: Optional[float] = Field(
-        default=None,
-        description="Normalized RMSE after Min-Max scaling to [0,1]. Only meaningful when score scales differ.",
     )
 
     min_error: float = Field(..., description="Minimum error")
@@ -112,13 +120,11 @@ class ValidationReport(BaseModel):
                     min_error=0,
                     max_error=0,
                     rank_correlation=None,
-                    normalized_mae=None,
-                    normalized_rmse=None,
                 ),
                 session_results=[],
             )
 
-        # Calculate metrics
+        # Calculate metrics from errors (predicted_score vs real_percentile)
         errors = [r.error for r in session_results]
         abs_errors = [r.absolute_error for r in session_results]
         sq_errors = [r.squared_error for r in session_results]
@@ -128,19 +134,16 @@ class ValidationReport(BaseModel):
         mean_err = mean(errors)
         std_err = stdev(errors) if len(errors) > 1 else None
 
-        # Get score lists for correlation and normalization
-        predicted = [r.predicted_score for r in session_results]
-        real = [r.real_score for r in session_results]
+        # Get predicted_score and real_percentile for correlation
+        predicted_scores = [r.predicted_score for r in session_results]
+        real_percentiles = [r.real_percentile for r in session_results]
 
-        # Scale-independent correlation metrics (recommended)
-        correlation = cls._calculate_correlation(predicted, real)
-        rank_correlation = cls._calculate_spearman_rank_correlation(predicted, real)
-        r_squared = correlation**2 if correlation is not None else None
-
-        # Normalized error metrics (Min-Max normalization)
-        normalized_mae, normalized_rmse = cls._calculate_normalized_errors(
-            predicted, real, abs_errors, sq_errors
+        # Correlation metrics: predicted_score vs real_percentile
+        correlation = cls._calculate_correlation(predicted_scores, real_percentiles)
+        rank_correlation = cls._calculate_spearman_rank_correlation(
+            predicted_scores, real_percentiles
         )
+        r_squared = correlation**2 if correlation is not None else None
 
         metrics = ValidationMetrics(
             mean_absolute_error=round(mae, 4),
@@ -150,8 +153,6 @@ class ValidationReport(BaseModel):
             correlation=round(correlation, 4) if correlation is not None else None,
             rank_correlation=round(rank_correlation, 4) if rank_correlation is not None else None,
             r_squared=round(r_squared, 4) if r_squared is not None else None,
-            normalized_mae=round(normalized_mae, 4) if normalized_mae is not None else None,
-            normalized_rmse=round(normalized_rmse, 4) if normalized_rmse is not None else None,
             min_error=round(min(errors), 4),
             max_error=round(max(errors), 4),
         )
@@ -238,59 +239,6 @@ class ValidationReport(BaseModel):
 
         # Calculate Pearson correlation on ranks
         return ValidationReport._calculate_correlation(ranks_x, ranks_y)
-
-    @staticmethod
-    def _calculate_normalized_errors(
-        predicted: list[float],
-        real: list[float],
-        abs_errors: list[float],
-        sq_errors: list[float],
-    ) -> tuple[Optional[float], Optional[float]]:
-        """Calculate normalized MAE and RMSE using Min-Max normalization.
-
-        Both predicted and real scores are normalized to [0, 1] range,
-        then errors are calculated on normalized values. This makes metrics
-        comparable even when score scales differ significantly.
-
-        Args:
-            predicted: List of predicted scores.
-            real: List of real scores.
-            abs_errors: List of absolute errors (for MAE calculation).
-            sq_errors: List of squared errors (for RMSE calculation).
-
-        Returns:
-            Tuple of (normalized_mae, normalized_rmse), or (None, None) if cannot calculate.
-        """
-        if len(predicted) < 2 or len(real) < 2:
-            return None, None
-
-        # Check if normalization is needed (i.e., if ranges differ significantly)
-        pred_range = max(predicted) - min(predicted)
-        real_range = max(real) - min(real)
-
-        # If either range is zero, normalization doesn't make sense
-        if pred_range == 0 or real_range == 0:
-            return None, None
-
-        # Min-Max normalize both score lists to [0, 1]
-        def min_max_normalize(values: list[float]) -> list[float]:
-            min_val = min(values)
-            max_val = max(values)
-            if max_val == min_val:
-                return [0.0] * len(values)
-            return [(v - min_val) / (max_val - min_val) for v in values]
-
-        normalized_pred = min_max_normalize(predicted)
-        normalized_real = min_max_normalize(real)
-
-        # Calculate normalized errors
-        normalized_abs_errors = [abs(p - r) for p, r in zip(normalized_pred, normalized_real)]
-        normalized_sq_errors = [(p - r) ** 2 for p, r in zip(normalized_pred, normalized_real)]
-
-        normalized_mae = mean(normalized_abs_errors)
-        normalized_rmse = math.sqrt(mean(normalized_sq_errors))
-
-        return normalized_mae, normalized_rmse
 
     def to_json(self, path: Path) -> None:
         """Save validation report to JSON file."""

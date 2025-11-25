@@ -24,7 +24,6 @@ from .extractor import RubricExtractor
 from .summarizer import RubricSummarizer
 from .semantic_summarizer import SemanticClusteringSummarizer
 from .visualizer import save_clustering_visualization
-from ..validation.validator import Validator
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +134,7 @@ class Trainer:
                 similarity_threshold=self.config.similarity_threshold,
                 min_rubrics=self.config.min_rubrics,
                 max_rubrics=self.config.max_rubrics,
+                min_samples=max(self.config.min_rubrics, 2),
             )
         return self._semantic_summarizer
 
@@ -393,6 +393,9 @@ class Trainer:
                     if eval_llm_config is None:
                         eval_llm_config = self.full_config.evaluation_llm
 
+                # Lazy import to avoid circular dependency
+                from ..validation.validator import Validator
+
                 # Initialize validator
                 validator = Validator(
                     dataset_dir=dataset_dir,
@@ -408,12 +411,23 @@ class Trainer:
                 # Run validation
                 validation_report = await validator.validate()
 
+                # Persist per-session validation results for downstream analysis
+                session_results_path = result_folder / "session-validation-results.json"
+                session_results_data = [
+                    result.model_dump(mode="json") for result in validation_report.session_results
+                ]
+                with open(session_results_path, "w", encoding="utf-8") as f:
+                    json.dump(session_results_data, f, indent=2, ensure_ascii=False)
+                logger.info(f"Saved session validation results to {session_results_path}")
+
                 # Convert validation report to dict for metadata
                 validation_metrics = validation_report.metrics
                 validation_data = {
                     "created_at": validation_report.created_at.isoformat(),
                     "score_name": validation_report.score_name,
                     "total_sessions": validation_report.total_sessions,
+                    "session_results_file": session_results_path.name,
+                    "session_results_count": len(session_results_data),
                     "metrics": {
                         "mean_absolute_error": validation_metrics.mean_absolute_error,
                         "root_mean_squared_error": validation_metrics.root_mean_squared_error,
@@ -422,8 +436,6 @@ class Trainer:
                         "correlation": validation_metrics.correlation,
                         "rank_correlation": validation_metrics.rank_correlation,
                         "r_squared": validation_metrics.r_squared,
-                        "normalized_mae": validation_metrics.normalized_mae,
-                        "normalized_rmse": validation_metrics.normalized_rmse,
                         "min_error": validation_metrics.min_error,
                         "max_error": validation_metrics.max_error,
                     },

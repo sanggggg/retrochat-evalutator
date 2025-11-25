@@ -1,5 +1,6 @@
 """Tests for training module."""
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +14,12 @@ from retrochat_evaluator.training.semantic_summarizer import SemanticClusteringS
 from retrochat_evaluator.training.trainer import Trainer
 from retrochat_evaluator.models.rubric import Rubric
 from retrochat_evaluator.models.chat_session import ChatSession
+from retrochat_evaluator.models.validation import (
+    SessionRubricScore,
+    SessionValidationResult,
+    ValidationMetrics,
+    ValidationReport,
+)
 from retrochat_evaluator.config import TrainingConfig, SummarizationMethod
 
 
@@ -290,6 +297,87 @@ class TestTrainer:
             assert (result_folder / "rubrics.json").exists()
             assert (result_folder / "metadata.json").exists()
             assert (result_folder / "raw-rubrics.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_save_rubrics_persists_session_validation_results(
+        self,
+        fixtures_dir: Path,
+        mock_manifest_path: Path,
+        sample_rubric_list,
+    ):
+        """Test that per-session validation results are persisted alongside metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompts_dir = Path(tmpdir) / "prompts"
+            prompts_dir.mkdir()
+            (prompts_dir / "rubric_extractor.txt").write_text("{chat_session}")
+            (prompts_dir / "rubric_summarizer.txt").write_text("{all_rubrics}")
+
+            trainer = Trainer(
+                dataset_dir=fixtures_dir,
+                manifest_path=mock_manifest_path,
+                prompts_dir=prompts_dir,
+            )
+
+            output_dir = Path(tmpdir) / "output"
+            raw_rubrics_map = {"session1": sample_rubric_list.rubrics[:1]}
+
+            session_results = [
+                SessionValidationResult(
+                    session_id="session1",
+                    file="session1.jsonl",
+                    predicted_score=75.0,
+                    real_score=4.5,
+                    real_percentile=80.0,
+                    error=-5.0,
+                    absolute_error=5.0,
+                    squared_error=25.0,
+                    rubric_scores=[
+                        SessionRubricScore(
+                            rubric_id="rubric-1",
+                            rubric_name="Clarity",
+                            score=4.5,
+                            max_score=5.0,
+                        )
+                    ],
+                )
+            ]
+            validation_metrics = ValidationMetrics(
+                mean_absolute_error=5.0,
+                root_mean_squared_error=5.0,
+                mean_error=-5.0,
+                std_error=None,
+                correlation=None,
+                rank_correlation=None,
+                r_squared=None,
+                min_error=-5.0,
+                max_error=-5.0,
+            )
+            validation_report = ValidationReport(
+                score_name="efficiency",
+                rubrics_file="rubrics.json",
+                total_sessions=1,
+                metrics=validation_metrics,
+                session_results=session_results,
+            )
+
+            mock_validator = MagicMock()
+            mock_validator.validate = AsyncMock(return_value=validation_report)
+
+            with patch(
+                "retrochat_evaluator.validation.validator.Validator", return_value=mock_validator
+            ):
+                result_folder = await trainer.save_rubrics(
+                    sample_rubric_list, output_dir, raw_rubrics_map, validate=True
+                )
+
+            session_results_path = result_folder / "session-validation-results.json"
+            assert session_results_path.exists()
+            saved_data = json.loads(session_results_path.read_text(encoding="utf-8"))
+            assert saved_data == [res.model_dump(mode="json") for res in session_results]
+
+            metadata = json.loads((result_folder / "metadata.json").read_text(encoding="utf-8"))
+            assert metadata["validation"]["session_results_file"] == "session-validation-results.json"
+            assert metadata["validation"]["session_results_count"] == len(session_results)
 
 
 class TestSemanticClusteringSummarizer:

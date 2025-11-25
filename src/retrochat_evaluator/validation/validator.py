@@ -1,21 +1,30 @@
 """Validator for comparing LLM-predicted scores against real scores."""
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from ..models.rubric import Rubric, RubricList
 from ..models.chat_session import ChatSession
 from ..models.evaluation import EvaluationResult
-from ..models.validation import (
-    SessionValidationResult,
-    ValidationReport,
-)
+from ..models.validation import SessionRubricScore, SessionValidationResult, ValidationReport
 from ..config import EvaluationConfig, EvaluationLLMConfig, RateLimiterConfig
 from ..training.loader import DatasetLoader, SessionInfo
 from ..evaluation.evaluator import Evaluator
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _IntermediateResult:
+    """Intermediate result before percentile calculation."""
+
+    session_id: str
+    file: str
+    predicted_score: float
+    real_score: float
+    rubric_scores: list[SessionRubricScore]
 
 
 class Validator:
@@ -121,23 +130,26 @@ class Validator:
             f"Validating {len(session_infos)} sessions against {len(rubric_list.rubrics)} rubrics"
         )
 
-        # Process each session
-        session_results: list[SessionValidationResult] = []
+        # Phase 1: Evaluate all sessions and collect intermediate results
+        intermediate_results: list[_IntermediateResult] = []
 
         for i, session_info in enumerate(session_infos, 1):
             logger.info(f"Processing session {i}/{len(session_infos)}: {session_info.file}")
 
             try:
-                result = await self._validate_session(
+                result = await self._evaluate_session(
                     session_info=session_info,
                     rubrics=rubric_list.rubrics,
                     rubrics_version=rubric_list.version,
                     evaluator=evaluator,
                     loader=loader,
                 )
-                session_results.append(result)
+                intermediate_results.append(result)
             except Exception as e:
                 logger.error(f"Failed to validate session {session_info.file}: {e}")
+
+        # Phase 2: Calculate percentiles and create final results
+        session_results = self._calculate_percentiles_and_create_results(intermediate_results)
 
         # Generate report
         report = ValidationReport.from_results(
@@ -146,7 +158,7 @@ class Validator:
             rubrics_file=str(self.rubrics_path),
         )
 
-        # Build metrics summary
+        # Build metrics summary (comparing predicted_score vs real_percentile)
         metrics = report.metrics
         metric_parts = [
             (
@@ -161,18 +173,6 @@ class Validator:
             ),
             f"R²: {metrics.r_squared:.4f}" if metrics.r_squared is not None else None,
         ]
-        if metrics.normalized_mae is not None:
-            metric_parts.append(f"Normalized MAE: {metrics.normalized_mae:.4f}")
-        if metrics.normalized_rmse is not None:
-            metric_parts.append(f"Normalized RMSE: {metrics.normalized_rmse:.4f}")
-
-        # Also show absolute errors with warning note
-        metric_parts.extend(
-            [
-                f"MAE: {metrics.mean_absolute_error:.4f} (note: may not be meaningful if scales differ)",
-                f"RMSE: {metrics.root_mean_squared_error:.4f} (note: may not be meaningful if scales differ)",
-            ]
-        )
 
         logger.info(
             f"Validation complete. {' | '.join([m for m in metric_parts if m is not None])}"
@@ -180,15 +180,15 @@ class Validator:
 
         return report
 
-    async def _validate_session(
+    async def _evaluate_session(
         self,
         session_info: SessionInfo,
         rubrics: list[Rubric],
         rubrics_version: Optional[str],
         evaluator: Evaluator,
         loader: DatasetLoader,
-    ) -> SessionValidationResult:
-        """Validate a single session.
+    ) -> _IntermediateResult:
+        """Evaluate a single session and return intermediate result.
 
         Args:
             session_info: Session information from manifest.
@@ -198,7 +198,7 @@ class Validator:
             loader: Dataset loader instance.
 
         Returns:
-            SessionValidationResult with comparison.
+            _IntermediateResult with scores (before percentile calculation).
         """
         # Load session
         session = loader.load_session(session_info)
@@ -210,24 +210,121 @@ class Validator:
             rubrics_version=rubrics_version,
         )
 
-        # Get real score
+        # Get scores
         real_score = session_info.get_score(self.score_name)
         predicted_score = eval_result.summary.total_score
 
-        # Calculate error metrics
-        error = predicted_score - real_score
-        absolute_error = abs(error)
-        squared_error = error**2
+        per_rubric_scores = [
+            SessionRubricScore(
+                rubric_id=rs.rubric_id,
+                rubric_name=rs.rubric_name,
+                score=rs.score,
+                max_score=rs.max_score,
+            )
+            for rs in eval_result.rubric_scores
+        ]
 
-        return SessionValidationResult(
+        return _IntermediateResult(
             session_id=session.session_id,
             file=session_info.file,
-            predicted_score=round(predicted_score, 4),
+            predicted_score=predicted_score,
             real_score=real_score,
-            error=round(error, 4),
-            absolute_error=round(absolute_error, 4),
-            squared_error=round(squared_error, 4),
+            rubric_scores=per_rubric_scores,
         )
+
+    def _calculate_percentiles_and_create_results(
+        self,
+        intermediate_results: list[_IntermediateResult],
+    ) -> list[SessionValidationResult]:
+        """Calculate real_percentile and create final SessionValidationResults.
+
+        Args:
+            intermediate_results: List of intermediate results with raw scores.
+
+        Returns:
+            List of SessionValidationResult comparing predicted_score vs real_percentile.
+        """
+        if not intermediate_results:
+            return []
+
+        # Extract real scores and calculate their percentile ranks
+        real_scores = [r.real_score for r in intermediate_results]
+        real_percentiles = self._calculate_percentile_ranks(real_scores)
+
+        # Create final results comparing predicted_score vs real_percentile
+        session_results: list[SessionValidationResult] = []
+        for i, ir in enumerate(intermediate_results):
+            real_pct = real_percentiles[i]
+
+            # Calculate error metrics: predicted_score vs real_percentile
+            # Note: these have different scales, so absolute error metrics may not be meaningful
+            error = ir.predicted_score - real_pct
+            absolute_error = abs(error)
+            squared_error = error**2
+
+            session_results.append(
+                SessionValidationResult(
+                    session_id=ir.session_id,
+                    file=ir.file,
+                    predicted_score=round(ir.predicted_score, 4),
+                    real_score=ir.real_score,
+                    real_percentile=round(real_pct, 4),
+                    error=round(error, 4),
+                    absolute_error=round(absolute_error, 4),
+                    squared_error=round(squared_error, 4),
+                    rubric_scores=ir.rubric_scores,
+                )
+            )
+
+        return session_results
+
+    @staticmethod
+    def _calculate_percentile_ranks(scores: list[float]) -> list[float]:
+        """Calculate percentile ranks for a list of scores.
+
+        Uses the 'rank' method where percentile = (rank / n) * 100.
+        Higher scores get higher percentiles.
+
+        Args:
+            scores: List of scores.
+
+        Returns:
+            List of percentile ranks (0-100) corresponding to each score.
+        """
+        n = len(scores)
+        if n == 0:
+            return []
+        if n == 1:
+            return [50.0]  # Single item gets median percentile
+
+        # Create sorted index pairs (original_index, score)
+        indexed_scores = list(enumerate(scores))
+        # Sort by score ascending
+        sorted_by_score = sorted(indexed_scores, key=lambda x: x[1])
+
+        # Assign ranks with tie handling (average rank for ties)
+        percentiles = [0.0] * n
+        i = 0
+        while i < n:
+            # Find all items with the same score (ties)
+            j = i
+            while j < n and sorted_by_score[j][1] == sorted_by_score[i][1]:
+                j += 1
+
+            # Average rank for tied items (1-based ranks)
+            avg_rank = (i + j + 1) / 2  # Average of ranks from i+1 to j
+
+            # Convert rank to percentile: (rank / n) * 100
+            percentile = (avg_rank / n) * 100
+
+            # Assign percentile to all tied items
+            for k in range(i, j):
+                original_index = sorted_by_score[k][0]
+                percentiles[original_index] = percentile
+
+            i = j
+
+        return percentiles
 
     def save_report(self, report: ValidationReport, output_path: Path) -> None:
         """Save validation report to JSON file.

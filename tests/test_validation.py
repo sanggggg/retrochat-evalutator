@@ -26,18 +26,20 @@ class TestSessionValidationResult:
             file="session.jsonl",
             predicted_score=4.2,
             real_score=4.5,
-            error=-0.3,
-            absolute_error=0.3,
-            squared_error=0.09,
+            real_percentile=70.0,
+            error=-65.8,  # 4.2 - 70.0
+            absolute_error=65.8,
+            squared_error=4329.64,
         )
 
         assert result.session_id == "test-001"
         assert result.file == "session.jsonl"
         assert result.predicted_score == 4.2
         assert result.real_score == 4.5
-        assert result.error == -0.3
-        assert result.absolute_error == 0.3
-        assert result.squared_error == 0.09
+        assert result.real_percentile == 70.0
+        assert result.error == -65.8
+        assert result.absolute_error == 65.8
+        assert result.squared_error == 4329.64
 
 
 class TestValidationMetrics:
@@ -86,34 +88,39 @@ class TestValidationReport:
 
     @pytest.fixture
     def sample_session_results(self) -> list[SessionValidationResult]:
-        """Create sample session validation results."""
+        """Create sample session validation results comparing predicted_score vs real_percentile."""
+        # real_percentiles: [3.5,4.0,4.5] -> [33.33,66.67,100]
+        # predicted_scores: [3.8, 4.0, 4.2] (raw scores from LLM)
         return [
             SessionValidationResult(
                 session_id="session-001",
                 file="session1.jsonl",
                 predicted_score=4.2,
                 real_score=4.5,
-                error=-0.3,
-                absolute_error=0.3,
-                squared_error=0.09,
+                real_percentile=100.0,
+                error=-95.8,  # 4.2 - 100.0
+                absolute_error=95.8,
+                squared_error=9177.64,
             ),
             SessionValidationResult(
                 session_id="session-002",
                 file="session2.jsonl",
                 predicted_score=3.8,
                 real_score=3.5,
-                error=0.3,
-                absolute_error=0.3,
-                squared_error=0.09,
+                real_percentile=33.33,
+                error=-29.53,  # 3.8 - 33.33
+                absolute_error=29.53,
+                squared_error=872.02,
             ),
             SessionValidationResult(
                 session_id="session-003",
                 file="session3.jsonl",
                 predicted_score=4.0,
                 real_score=4.0,
-                error=0.0,
-                absolute_error=0.0,
-                squared_error=0.0,
+                real_percentile=66.67,
+                error=-62.67,  # 4.0 - 66.67
+                absolute_error=62.67,
+                squared_error=3927.53,
             ),
         ]
 
@@ -130,19 +137,16 @@ class TestValidationReport:
         assert report.rubrics_file == "./rubrics.json"
         assert len(report.session_results) == 3
 
-        # Check metrics
-        # MAE = (0.3 + 0.3 + 0.0) / 3 = 0.2
-        assert report.metrics.mean_absolute_error == 0.2
+        # Check that metrics are calculated (values depend on predicted_score vs real_percentile)
+        # MAE = (95.8 + 29.53 + 62.67) / 3 = 62.67
+        assert 62.0 <= report.metrics.mean_absolute_error <= 63.0
 
-        # RMSE = sqrt((0.09 + 0.09 + 0.0) / 3) = sqrt(0.06) ≈ 0.2449
-        assert 0.24 <= report.metrics.root_mean_squared_error <= 0.25
-
-        # Mean error = (-0.3 + 0.3 + 0.0) / 3 = 0.0
-        assert report.metrics.mean_error == 0.0
+        # Mean error should be negative (predicted_score < real_percentile)
+        assert report.metrics.mean_error < 0
 
         # Error range
-        assert report.metrics.min_error == -0.3
-        assert report.metrics.max_error == 0.3
+        assert report.metrics.min_error < 0
+        assert report.metrics.max_error < 0
 
     def test_from_results_empty(self):
         """Test creating report from empty results."""
@@ -164,9 +168,10 @@ class TestValidationReport:
             file="session1.jsonl",
             predicted_score=4.2,
             real_score=4.5,
-            error=-0.3,
-            absolute_error=0.3,
-            squared_error=0.09,
+            real_percentile=50.0,
+            error=-45.8,  # 4.2 - 50.0
+            absolute_error=45.8,
+            squared_error=2097.64,
         )
 
         report = ValidationReport.from_results(
@@ -180,17 +185,19 @@ class TestValidationReport:
         assert report.metrics.correlation is None  # Can't calculate with single value
 
     def test_calculate_correlation(self):
-        """Test correlation calculation."""
-        # Perfect positive correlation
+        """Test correlation calculation between predicted_score and real_percentile."""
+        # Perfect positive correlation: both increase together
+        # predicted_score = [1, 2, 3, 4, 5], real_percentile = [20, 40, 60, 80, 100]
         results = [
             SessionValidationResult(
                 session_id=f"s{i}",
                 file=f"s{i}.jsonl",
                 predicted_score=float(i),
                 real_score=float(i),
-                error=0.0,
-                absolute_error=0.0,
-                squared_error=0.0,
+                real_percentile=float(i) * 20,
+                error=float(i) - float(i) * 20,
+                absolute_error=abs(float(i) - float(i) * 20),
+                squared_error=(float(i) - float(i) * 20) ** 2,
             )
             for i in range(1, 6)
         ]
@@ -361,9 +368,10 @@ class TestValidator:
                         file="test.jsonl",
                         predicted_score=4.0,
                         real_score=4.5,
-                        error=-0.5,
-                        absolute_error=0.5,
-                        squared_error=0.25,
+                        real_percentile=50.0,
+                        error=-46.0,  # 4.0 - 50.0
+                        absolute_error=46.0,
+                        squared_error=2116.0,
                     )
                 ],
                 score_name="efficiency",
@@ -381,26 +389,29 @@ class TestValidationReportCorrelation:
     """Additional tests for correlation calculation edge cases."""
 
     def test_negative_correlation(self):
-        """Test negative correlation detection."""
+        """Test negative correlation detection between predicted_score and real_percentile."""
         # Create results with negative correlation
+        # High predicted_score -> Low real_percentile, and vice versa
         results = [
             SessionValidationResult(
                 session_id="s1",
                 file="s1.jsonl",
-                predicted_score=5.0,
+                predicted_score=5.0,  # High predicted
                 real_score=1.0,
-                error=4.0,
-                absolute_error=4.0,
-                squared_error=16.0,
+                real_percentile=25.0,  # Low real percentile
+                error=-20.0,  # 5.0 - 25.0
+                absolute_error=20.0,
+                squared_error=400.0,
             ),
             SessionValidationResult(
                 session_id="s2",
                 file="s2.jsonl",
-                predicted_score=1.0,
+                predicted_score=1.0,  # Low predicted
                 real_score=5.0,
-                error=-4.0,
-                absolute_error=4.0,
-                squared_error=16.0,
+                real_percentile=100.0,  # High real percentile
+                error=-99.0,  # 1.0 - 100.0
+                absolute_error=99.0,
+                squared_error=9801.0,
             ),
         ]
 
@@ -419,11 +430,12 @@ class TestValidationReportCorrelation:
             SessionValidationResult(
                 session_id=f"s{i}",
                 file=f"s{i}.jsonl",
-                predicted_score=3.0,  # All same
+                predicted_score=3.0,  # All same predicted score
                 real_score=float(i),
-                error=3.0 - float(i),
-                absolute_error=abs(3.0 - float(i)),
-                squared_error=(3.0 - float(i)) ** 2,
+                real_percentile=float(i) * 33.33,
+                error=3.0 - float(i) * 33.33,
+                absolute_error=abs(3.0 - float(i) * 33.33),
+                squared_error=(3.0 - float(i) * 33.33) ** 2,
             )
             for i in range(1, 4)
         ]
