@@ -15,6 +15,7 @@ class SummarizationMethod(str, Enum):
 
     LLM = "llm"  # Use LLM prompt-based summarization
     SEMANTIC_CLUSTERING = "semantic_clustering"  # Use embedding + HAC clustering
+    BOTH = "both"  # Use both methods and save results separately
 
 
 @dataclass
@@ -47,7 +48,7 @@ class LLMConfig:
 class ExtractionLLMConfig(LLMConfig):
     """LLM configuration for rubric extraction."""
 
-    model_name: str = "dummy"
+    model_name: str = "gemini-2.5-flash-lite"
     temperature: float = 0.3
     max_tokens: int = 4096
 
@@ -56,7 +57,7 @@ class ExtractionLLMConfig(LLMConfig):
 class SummarizationLLMConfig(LLMConfig):
     """LLM configuration for rubric summarization."""
 
-    model_name: str = "dummy"
+    model_name: str = "gemini-2.5-flash-lite"
     temperature: float = 0.3
     max_tokens: int = 8192
 
@@ -65,7 +66,7 @@ class SummarizationLLMConfig(LLMConfig):
 class EvaluationLLMConfig(LLMConfig):
     """LLM configuration for evaluation/scoring."""
 
-    model_name: str = "dummy"
+    model_name: str = "gemini-2.5-flash-lite"
     temperature: float = 0.1
     max_tokens: int = 1024
 

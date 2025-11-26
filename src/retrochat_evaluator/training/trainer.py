@@ -140,13 +140,17 @@ class Trainer:
             )
         return self._semantic_summarizer
 
-    async def train(self) -> tuple[RubricList, dict[str, list[Rubric]], list[ChatSession]]:
+    async def train(
+        self,
+    ) -> tuple[dict[str, RubricList], dict[str, list[Rubric]], list[ChatSession]]:
         """Execute full training pipeline.
 
         Returns:
-            Tuple of (RubricList containing the final consolidated rubrics,
+            Tuple of (dict mapping method_name to RubricList,
                      dict mapping session_id to list of extracted rubrics,
                      list of ChatSession objects used for training).
+            When summarization_method is BOTH, the first dict will have keys 'llm' and 'cluster'.
+            Otherwise, it will have a single key matching the method name.
         """
         logger.info("Starting training pipeline")
 
@@ -218,28 +222,84 @@ class Trainer:
 
         # 4. Summarize into final rubrics
         logger.info(f"Consolidating rubrics using method: {self.config.summarization_method.value}")
-        if self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING:
-            summarizer = self._get_semantic_summarizer()
+
+        rubric_lists: dict[str, RubricList] = {}
+
+        if self.config.summarization_method == SummarizationMethod.BOTH:
+            # Run both methods
+            logger.info("Running both LLM and clustering summarization methods")
+            import asyncio as aio
+
+            llm_summarizer = self._get_summarizer()
+            cluster_summarizer = self._get_semantic_summarizer()
+
+            llm_task = aio.create_task(llm_summarizer.summarize(non_empty_lists))
+            cluster_task = aio.create_task(cluster_summarizer.summarize(non_empty_lists))
+
+            (llm_rubrics, llm_notes), (cluster_rubrics, cluster_notes) = await aio.gather(
+                llm_task, cluster_task
+            )
+
+            # Create RubricList for LLM method
+            rubric_lists["llm"] = RubricList(
+                version="1.0",
+                created_at=datetime.utcnow(),
+                training_config=RubricTrainingConfig(
+                    score_name=self.config.score_name,
+                    score_top_percentile=self.config.score_top_percentile,
+                    sessions_used=len(chat_sessions),
+                    total_sessions=total_sessions,
+                ),
+                rubrics=llm_rubrics,
+                consolidation_notes=llm_notes,
+            )
+
+            # Create RubricList for clustering method
+            rubric_lists["cluster"] = RubricList(
+                version="1.0",
+                created_at=datetime.utcnow(),
+                training_config=RubricTrainingConfig(
+                    score_name=self.config.score_name,
+                    score_top_percentile=self.config.score_top_percentile,
+                    sessions_used=len(chat_sessions),
+                    total_sessions=total_sessions,
+                ),
+                rubrics=cluster_rubrics,
+                consolidation_notes=cluster_notes,
+            )
+
+            logger.info(
+                f"Training complete. Generated {len(llm_rubrics)} LLM rubrics "
+                f"and {len(cluster_rubrics)} clustering rubrics"
+            )
         else:
-            summarizer = self._get_summarizer()
-        final_rubrics, consolidation_notes = await summarizer.summarize(non_empty_lists)
+            # Run single method
+            if self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING:
+                summarizer = self._get_semantic_summarizer()
+                method_name = "cluster"
+            else:
+                summarizer = self._get_summarizer()
+                method_name = "llm"
 
-        # 5. Create RubricList with metadata
-        rubric_list = RubricList(
-            version="1.0",
-            created_at=datetime.utcnow(),
-            training_config=RubricTrainingConfig(
-                score_name=self.config.score_name,
-                score_top_percentile=self.config.score_top_percentile,
-                sessions_used=len(chat_sessions),
-                total_sessions=total_sessions,
-            ),
-            rubrics=final_rubrics,
-            consolidation_notes=consolidation_notes,
-        )
+            final_rubrics, consolidation_notes = await summarizer.summarize(non_empty_lists)
 
-        logger.info(f"Training complete. Generated {len(final_rubrics)} rubrics")
-        return rubric_list, raw_rubrics_map, chat_sessions
+            # 5. Create RubricList with metadata
+            rubric_lists[method_name] = RubricList(
+                version="1.0",
+                created_at=datetime.utcnow(),
+                training_config=RubricTrainingConfig(
+                    score_name=self.config.score_name,
+                    score_top_percentile=self.config.score_top_percentile,
+                    sessions_used=len(chat_sessions),
+                    total_sessions=total_sessions,
+                ),
+                rubrics=final_rubrics,
+                consolidation_notes=consolidation_notes,
+            )
+
+            logger.info(f"Training complete. Generated {len(final_rubrics)} rubrics")
+
+        return rubric_lists, raw_rubrics_map, chat_sessions
 
     async def save_rubrics(
         self,
@@ -247,11 +307,12 @@ class Trainer:
         output_path: Path,
         raw_rubrics_map: Optional[dict[str, list[Rubric]]] = None,
         validate: bool = True,
+        method_name: Optional[str] = None,
     ) -> Path:
         """Save rubrics to organized folder structure.
 
         Creates a folder structure:
-        - output_path/train-result-YYYY-MM-DD-HHMMSS/
+        - output_path/train-result-YYYY-MM-DD-HHMMSS-{method_name}/
           - rubrics.json (final consolidated rubrics)
           - metadata.json (training config and metadata)
           - raw-rubrics.json (session-to-rubrics mapping)
@@ -261,6 +322,7 @@ class Trainer:
             output_path: Base output directory (will create subfolder).
             raw_rubrics_map: Optional mapping of session_id to extracted rubrics.
             validate: Whether to perform validation after saving (default: True).
+            method_name: Optional method name to include in folder name (e.g., 'llm', 'cluster').
 
         Returns:
             Path to the created training result folder.
@@ -277,7 +339,10 @@ class Trainer:
 
         # Create timestamped folder
         timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-        result_folder = output_path / f"train-result-{timestamp}"
+        folder_name = f"train-result-{timestamp}"
+        if method_name:
+            folder_name += f"-{method_name}"
+        result_folder = output_path / folder_name
         result_folder.mkdir(parents=True, exist_ok=True)
 
         # 1. Save rubrics.json
@@ -298,7 +363,9 @@ class Trainer:
                 "total_sessions": (
                     rubrics.training_config.total_sessions if rubrics.training_config else 0
                 ),
-                "summarization_method": self.config.summarization_method.value,
+                "summarization_method": (
+                    method_name if method_name else self.config.summarization_method.value
+                ),
                 "min_rubrics": self.config.min_rubrics,
                 "max_rubrics": self.config.max_rubrics,
                 "extraction_min_rubrics": self.config.extraction_min_rubrics,
@@ -361,8 +428,15 @@ class Trainer:
             logger.info(f"Created empty raw-rubrics.json at {raw_rubrics_path}")
 
         # 4. Generate clustering visualization if semantic clustering was used
+        is_cluster_method = (
+            method_name == "cluster"
+            or (
+                method_name is None
+                and self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING
+            )
+        )
         if (
-            self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING
+            is_cluster_method
             and self._semantic_summarizer is not None
             and self._semantic_summarizer.last_embeddings is not None
             and self._semantic_summarizer.last_clusters is not None

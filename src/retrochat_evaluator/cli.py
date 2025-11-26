@@ -209,9 +209,9 @@ def main(ctx: click.Context, verbose: bool) -> None:
 )
 @click.option(
     "--summarization-method",
-    type=click.Choice(["llm", "semantic_clustering"], case_sensitive=False),
+    type=click.Choice(["llm", "semantic_clustering", "both"], case_sensitive=False),
     default=None,
-    help="Method for consolidating rubrics: 'llm' (prompt-based) or 'semantic_clustering' (embedding + HAC)",
+    help="Method for consolidating rubrics: 'llm', 'semantic_clustering', or 'both' (runs both methods separately)",
 )
 @click.option(
     "--embedding-model",
@@ -347,9 +347,9 @@ def train(
         async def run_training():
             nonlocal output
             with get_usage_metadata_callback() as cb:
-                rubrics, raw_rubrics_map, _ = await trainer.train()
+                rubrics_dict, raw_rubrics_map, _ = await trainer.train()
 
-                if not rubrics.rubrics:
+                if not rubrics_dict:
                     click.echo("Warning: No rubrics were generated. Check your dataset.", err=True)
                     sys.exit(1)
 
@@ -360,14 +360,27 @@ def train(
                     # If user provided a .json file, use its parent directory
                     output = output.parent / "output"
 
-                result_folder = await trainer.save_rubrics(rubrics, output, raw_rubrics_map)
-                click.echo(f"Generated {len(rubrics.rubrics)} rubrics")
-                click.echo(f"Saved to: {result_folder}")
+                # Save each method's results
+                result_folders = []
+                for method_name, rubrics in rubrics_dict.items():
+                    if not rubrics.rubrics:
+                        click.echo(
+                            f"Warning: No rubrics were generated for method '{method_name}'.",
+                            err=True,
+                        )
+                        continue
 
-                # Display rubric summary
-                click.echo("\nGenerated Rubrics:")
-                for rubric in rubrics.rubrics:
-                    click.echo(f"  - {rubric.id}: {rubric.name}")
+                    result_folder = await trainer.save_rubrics(
+                        rubrics, output, raw_rubrics_map, method_name=method_name
+                    )
+                    result_folders.append((method_name, result_folder, rubrics))
+                    click.echo(f"\n[{method_name.upper()}] Generated {len(rubrics.rubrics)} rubrics")
+                    click.echo(f"[{method_name.upper()}] Saved to: {result_folder}")
+
+                    # Display rubric summary
+                    click.echo(f"\n[{method_name.upper()}] Generated Rubrics:")
+                    for rubric in rubrics.rubrics:
+                        click.echo(f"  - {rubric.id}: {rubric.name}")
 
                 # Display token usage
                 if cb.usage_metadata:
