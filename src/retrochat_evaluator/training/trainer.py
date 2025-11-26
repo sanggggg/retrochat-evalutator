@@ -509,15 +509,7 @@ class Trainer:
                     "session_results_file": session_results_path.name,
                     "session_results_count": len(session_results_data),
                     "metrics": {
-                        "mean_absolute_error": validation_metrics.mean_absolute_error,
-                        "root_mean_squared_error": validation_metrics.root_mean_squared_error,
-                        "mean_error": validation_metrics.mean_error,
-                        "std_error": validation_metrics.std_error,
-                        "correlation": validation_metrics.correlation,
                         "rank_correlation": validation_metrics.rank_correlation,
-                        "r_squared": validation_metrics.r_squared,
-                        "min_error": validation_metrics.min_error,
-                        "max_error": validation_metrics.max_error,
                     },
                 }
 
@@ -537,10 +529,7 @@ class Trainer:
 
                 logger.info(
                     "Validation complete: "
-                    f"Correlation={_fmt_optional(metrics.correlation)}, "
                     f"Rank Correlation={_fmt_optional(metrics.rank_correlation)}, "
-                    f"R²={_fmt_optional(metrics.r_squared)}, "
-                    f"MAE={metrics.mean_absolute_error:.4f}"
                 )
 
             except Exception as e:

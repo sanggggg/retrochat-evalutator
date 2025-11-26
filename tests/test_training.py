@@ -261,8 +261,12 @@ class TestTrainer:
         trainer._extraction_llm_client = mock_client
         trainer._summarization_llm_client = mock_client
 
-        rubric_list, raw_rubrics_map, _ = await trainer.train()
+        rubric_lists, raw_rubrics_map, _ = await trainer.train()
 
+        # train() now returns dict[str, RubricList]
+        assert isinstance(rubric_lists, dict)
+        assert "llm" in rubric_lists
+        rubric_list = rubric_lists["llm"]
         assert rubric_list is not None
         assert len(rubric_list.rubrics) == 2
         assert rubric_list.training_config is not None
@@ -327,10 +331,6 @@ class TestTrainer:
                     file="session1.jsonl",
                     predicted_score=75.0,
                     real_score=4.5,
-                    real_percentile=80.0,
-                    error=-5.0,
-                    absolute_error=5.0,
-                    squared_error=25.0,
                     rubric_scores=[
                         SessionRubricScore(
                             rubric_id="rubric-1",
@@ -342,15 +342,7 @@ class TestTrainer:
                 )
             ]
             validation_metrics = ValidationMetrics(
-                mean_absolute_error=5.0,
-                root_mean_squared_error=5.0,
-                mean_error=-5.0,
-                std_error=None,
-                correlation=None,
-                rank_correlation=None,
-                r_squared=None,
-                min_error=-5.0,
-                max_error=-5.0,
+                rank_correlation=0.85,
             )
             validation_report = ValidationReport(
                 score_name="efficiency",
@@ -741,8 +733,12 @@ class TestTrainerWithSemanticClustering:
             "retrochat_evaluator.training.semantic_summarizer.SemanticClusteringSummarizer._generate_embeddings",
             new=AsyncMock(return_value=mock_embeddings),
         ):
-            rubric_list, raw_rubrics_map, _ = await trainer.train()
+            rubric_lists, raw_rubrics_map, _ = await trainer.train()
 
+        # train() now returns dict[str, RubricList]
+        assert isinstance(rubric_lists, dict)
+        assert "cluster" in rubric_lists
+        rubric_list = rubric_lists["cluster"]
         assert rubric_list is not None
         assert len(rubric_list.rubrics) >= 1
         assert rubric_list.training_config is not None

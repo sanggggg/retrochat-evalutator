@@ -741,27 +741,25 @@ def validate(
             click.echo(f"  Score type: {report.score_name}")
 
             click.echo(f"\nMetrics:")
-            click.echo(f"  Mean Absolute Error (MAE): {report.metrics.mean_absolute_error}")
-            click.echo(
-                f"  Root Mean Squared Error (RMSE): {report.metrics.root_mean_squared_error}"
-            )
-            click.echo(f"  Mean Error (bias): {report.metrics.mean_error}")
-            if report.metrics.correlation is not None:
-                click.echo(f"  Correlation: {report.metrics.correlation}")
-            if report.metrics.r_squared is not None:
-                click.echo(f"  R-squared: {report.metrics.r_squared}")
-
-            click.echo(f"\nError Range:")
-            click.echo(f"  Min error: {report.metrics.min_error}")
-            click.echo(f"  Max error: {report.metrics.max_error}")
+            if report.metrics.rank_correlation is not None:
+                click.echo(f"  Kendall Rank Correlation (τ): {report.metrics.rank_correlation:.4f}")
+                if report.metrics.p_value is not None:
+                    sig = ""
+                    if report.metrics.p_value < 0.001:
+                        sig = "***"
+                    elif report.metrics.p_value < 0.01:
+                        sig = "**"
+                    elif report.metrics.p_value < 0.05:
+                        sig = "*"
+                    click.echo(f"  P-value: {report.metrics.p_value:.6f} {sig}")
 
             # Show per-session summary if verbose or few sessions
             if ctx.obj.get("verbose") or report.total_sessions <= 10:
                 click.echo(f"\nPer-Session Results:")
                 for result in report.session_results:
                     click.echo(
-                        f"  - {result.file}: predicted={result.predicted_score}, "
-                        f"real={result.real_score}, error={result.error:+.4f}"
+                        f"  - {result.file}: predicted={result.predicted_score:.4f}, "
+                        f"real={result.real_score:.4f}"
                     )
 
             # Display token usage
@@ -773,6 +771,88 @@ def validate(
         if ctx.obj.get("verbose"):
             import traceback
 
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@main.command("validation-metrics")
+@click.argument(
+    "report",
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--show-sessions",
+    "-s",
+    is_flag=True,
+    help="Show per-session validation results",
+)
+@click.pass_context
+def validation_metrics(
+    ctx: click.Context,
+    report: Path,
+    show_sessions: bool,
+) -> None:
+    """Display metrics from a validation report JSON file.
+
+    Takes a validation report JSON file (from the validate command) and displays
+    the validation metrics including Kendall rank correlation.
+    """
+    try:
+        from .models.validation import ValidationReport
+
+        # Load report
+        validation_report = ValidationReport.from_json(report)
+
+        click.echo(f"Validation Report: {report}")
+        click.echo("=" * 60)
+
+        # Display basic info
+        click.echo(f"\nBasic Information:")
+        click.echo(f"  Total sessions: {validation_report.total_sessions}")
+        click.echo(f"  Score type: {validation_report.score_name}")
+        click.echo(f"  Rubrics file: {validation_report.rubrics_file}")
+        click.echo(f"  Created at: {validation_report.created_at}")
+
+        # Display metrics
+        click.echo(f"\nValidation Metrics:")
+        metrics = validation_report.metrics
+
+        if metrics.rank_correlation is not None:
+            click.echo(f"  Kendall Rank Correlation (τ): {metrics.rank_correlation:.4f}")
+            if metrics.p_value is not None:
+                click.echo(f"  P-value: {metrics.p_value:.6f}")
+                # Add significance indicator
+                if metrics.p_value < 0.001:
+                    click.echo(f"  Significance: *** (p < 0.001)")
+                elif metrics.p_value < 0.01:
+                    click.echo(f"  Significance: ** (p < 0.01)")
+                elif metrics.p_value < 0.05:
+                    click.echo(f"  Significance: * (p < 0.05)")
+                else:
+                    click.echo(f"  Significance: not significant (p ≥ 0.05)")
+        else:
+            click.echo(f"  Kendall Rank Correlation: N/A (insufficient data)")
+
+        # Display per-session results if requested
+        if show_sessions and validation_report.session_results:
+            click.echo(f"\nPer-Session Results:")
+            click.echo(f"  {'Session':<30} {'Predicted':<12} {'Real':<12}")
+            click.echo("  " + "-" * 54)
+
+            for result in validation_report.session_results:
+                session_name = result.file if len(result.file) <= 30 else result.file[:27] + "..."
+                click.echo(
+                    f"  {session_name:<30} "
+                    f"{result.predicted_score:<12.4f} "
+                    f"{result.real_score:<12.4f}"
+                )
+
+        click.echo("=" * 60)
+
+    except Exception as e:
+        click.echo(f"Error reading validation report: {e}", err=True)
+        if ctx.obj.get("verbose"):
+            import traceback
             traceback.print_exc()
         sys.exit(1)
 
