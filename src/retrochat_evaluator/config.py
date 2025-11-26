@@ -91,7 +91,7 @@ class TrainingConfig:
     max_rubrics: int = 10
 
     # Semantic clustering configuration (used when summarization_method == SEMANTIC_CLUSTERING)
-    embedding_model: str = "models/text-embedding-004"
+    embedding_model: str = "models/gemini-embedding-001"
     umap_n_neighbors: int = 15
     umap_n_components: int = 5
     umap_metric: str = "cosine"

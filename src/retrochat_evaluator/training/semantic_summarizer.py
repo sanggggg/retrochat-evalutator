@@ -19,7 +19,7 @@ class SemanticClusteringSummarizer:
     """Consolidate rubrics using semantic embedding and clustering.
 
     This approach uses:
-    1. Text embedding via Google AI (text-embedding-004) to convert rubrics to vectors
+    1. Text embedding via Google AI (gemini-embedding-001) to convert rubrics to vectors
     2. UMAP (Uniform Manifold Approximation and Projection) for dimensionality reduction
     3. HDBSCAN (Hierarchical Density-Based Spatial Clustering) to group similar rubrics
     4. Cluster size as frequency metric
@@ -28,7 +28,7 @@ class SemanticClusteringSummarizer:
 
     def __init__(
         self,
-        embedding_model: str = "models/text-embedding-004",
+        embedding_model: str = "models/gemini-embedding-001",
         umap_n_neighbors: int = 15,
         umap_n_components: int = 5,
         umap_metric: str = "cosine",

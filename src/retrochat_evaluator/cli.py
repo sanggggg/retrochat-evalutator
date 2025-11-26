@@ -217,7 +217,7 @@ def main(ctx: click.Context, verbose: bool) -> None:
     "--embedding-model",
     type=str,
     default=None,
-    help="Google AI embedding model for semantic clustering (default: models/text-embedding-004)",
+    help="Google AI embedding model for semantic clustering (default: models/gemini-embedding-001)",
 )
 @click.option(
     "--umap-n-neighbors",

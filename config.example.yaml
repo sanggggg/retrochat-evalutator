@@ -49,7 +49,7 @@ training:
   max_rubrics: 10
 
   # Semantic clustering options (used when summarization_method is semantic_clustering)
-  embedding_model: models/text-embedding-004
+  embedding_model: models/gemini-embedding-001
   umap_n_neighbors: 15
   umap_n_components: 5
   umap_metric: cosine

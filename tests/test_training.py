@@ -492,7 +492,7 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            embedding_model="models/text-embedding-004",
+            embedding_model="models/gemini-embedding-001",
             umap_n_neighbors=3,
             umap_n_components=2,
             min_cluster_size=2,
@@ -642,7 +642,7 @@ class TestSemanticClusteringSummarizer:
         import numpy as np
 
         summarizer = SemanticClusteringSummarizer(
-            embedding_model="models/text-embedding-004",
+            embedding_model="models/gemini-embedding-001",
             umap_n_neighbors=3,
             umap_n_components=2,
             min_cluster_size=2,
@@ -658,7 +658,7 @@ class TestSemanticClusteringSummarizer:
         assert "Input:" in notes
         assert "Output:" in notes
         assert "HDBSCAN" in notes
-        assert "text-embedding-004" in notes
+        assert "gemini-embedding-001" in notes
 
 
 class TestTrainerWithSemanticClustering:
