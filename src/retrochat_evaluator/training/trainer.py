@@ -324,7 +324,10 @@ class Trainer:
         # Add semantic clustering config if used
         if self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING:
             metadata["training_config"]["embedding_model"] = self.config.embedding_model
-            metadata["training_config"]["similarity_threshold"] = self.config.similarity_threshold
+            metadata["training_config"]["umap_n_neighbors"] = self.config.umap_n_neighbors
+            metadata["training_config"]["umap_n_components"] = self.config.umap_n_components
+            metadata["training_config"]["umap_metric"] = self.config.umap_metric
+            metadata["training_config"]["min_cluster_size"] = self.config.min_cluster_size
 
         # Add full config paths if available
         if self.full_config:

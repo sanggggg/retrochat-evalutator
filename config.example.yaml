@@ -50,7 +50,10 @@ training:
 
   # Semantic clustering options (used when summarization_method is semantic_clustering)
   embedding_model: models/text-embedding-004
-  similarity_threshold: 0.75
+  umap_n_neighbors: 15
+  umap_n_components: 5
+  umap_metric: cosine
+  min_cluster_size: 2
 
 # Evaluation Configuration
 evaluation:
