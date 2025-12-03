@@ -374,7 +374,9 @@ def train(
                         rubrics, output, raw_rubrics_map, method_name=method_name
                     )
                     result_folders.append((method_name, result_folder, rubrics))
-                    click.echo(f"\n[{method_name.upper()}] Generated {len(rubrics.rubrics)} rubrics")
+                    click.echo(
+                        f"\n[{method_name.upper()}] Generated {len(rubrics.rubrics)} rubrics"
+                    )
                     click.echo(f"[{method_name.upper()}] Saved to: {result_folder}")
 
                     # Display rubric summary
@@ -853,6 +855,7 @@ def validation_metrics(
         click.echo(f"Error reading validation report: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 
@@ -972,18 +975,30 @@ def summarize(
     # Override config values from command line
     min_rubrics_val = min_rubrics if min_rubrics is not None else cfg.training.min_rubrics
     max_rubrics_val = max_rubrics if max_rubrics is not None else cfg.training.max_rubrics
-    embedding_model_val = embedding_model if embedding_model is not None else cfg.training.embedding_model
-    umap_n_neighbors_val = umap_n_neighbors if umap_n_neighbors is not None else cfg.training.umap_n_neighbors
-    umap_n_components_val = umap_n_components if umap_n_components is not None else cfg.training.umap_n_components
-    min_cluster_size_val = min_cluster_size if min_cluster_size is not None else cfg.training.min_cluster_size
+    embedding_model_val = (
+        embedding_model if embedding_model is not None else cfg.training.embedding_model
+    )
+    umap_n_neighbors_val = (
+        umap_n_neighbors if umap_n_neighbors is not None else cfg.training.umap_n_neighbors
+    )
+    umap_n_components_val = (
+        umap_n_components if umap_n_components is not None else cfg.training.umap_n_components
+    )
+    min_cluster_size_val = (
+        min_cluster_size if min_cluster_size is not None else cfg.training.min_cluster_size
+    )
 
-    click.echo(f"Summarization settings: min_rubrics={min_rubrics_val}, max_rubrics={max_rubrics_val}")
+    click.echo(
+        f"Summarization settings: min_rubrics={min_rubrics_val}, max_rubrics={max_rubrics_val}"
+    )
     click.echo(f"Method: {method}")
     if method.lower() in ["cluster", "both"]:
-        click.echo(f"Clustering settings: embedding_model={embedding_model_val}, "
-                   f"umap_n_neighbors={umap_n_neighbors_val}, "
-                   f"umap_n_components={umap_n_components_val}, "
-                   f"min_cluster_size={min_cluster_size_val}")
+        click.echo(
+            f"Clustering settings: embedding_model={embedding_model_val}, "
+            f"umap_n_neighbors={umap_n_neighbors_val}, "
+            f"umap_n_components={umap_n_components_val}, "
+            f"min_cluster_size={min_cluster_size_val}"
+        )
 
     # Load raw rubrics
     def load_raw_rubrics(raw_rubrics_path: Path) -> list[list[Rubric]]:
@@ -999,13 +1014,17 @@ def summarize(
                     rubric = Rubric(**rubric_dict)
                     rubrics.append(rubric)
                 except Exception as e:
-                    click.echo(f"Warning: Failed to parse rubric from session {session_id}: {e}", err=True)
+                    click.echo(
+                        f"Warning: Failed to parse rubric from session {session_id}: {e}", err=True
+                    )
                     continue
             if rubrics:
                 rubric_lists.append(rubrics)
 
         total_rubrics = sum(len(r) for r in rubric_lists)
-        click.echo(f"Loaded {len(rubric_lists)} sessions with {total_rubrics} total rubrics from {raw_rubrics_path}")
+        click.echo(
+            f"Loaded {len(rubric_lists)} sessions with {total_rubrics} total rubrics from {raw_rubrics_path}"
+        )
         return rubric_lists
 
     try:
@@ -1049,6 +1068,7 @@ def summarize(
             if method.lower() == "both":
                 click.echo("Starting summarization (both LLM and Clustering)...")
                 import asyncio as aio
+
                 llm_task = aio.create_task(llm_summarizer.summarize(rubric_lists))
                 cluster_task = aio.create_task(cluster_summarizer.summarize(rubric_lists))
                 (llm_rubrics, llm_notes), (cluster_rubrics, cluster_notes) = await aio.gather(
@@ -1063,7 +1083,9 @@ def summarize(
 
             # Save results
             if method.lower() in ["llm", "both"] and llm_rubrics:
-                click.echo(f"LLM summarization complete. Generated {len(llm_rubrics)} final rubrics")
+                click.echo(
+                    f"LLM summarization complete. Generated {len(llm_rubrics)} final rubrics"
+                )
                 llm_rubric_list = RubricList(
                     version="1.0",
                     created_at=datetime.utcnow(),
@@ -1076,7 +1098,9 @@ def summarize(
                 click.echo(f"Saved LLM rubrics to {llm_output_path}")
 
             if method.lower() in ["cluster", "both"] and cluster_rubrics:
-                click.echo(f"Clustering summarization complete. Generated {len(cluster_rubrics)} final rubrics")
+                click.echo(
+                    f"Clustering summarization complete. Generated {len(cluster_rubrics)} final rubrics"
+                )
                 cluster_rubric_list = RubricList(
                     version="1.0",
                     created_at=datetime.utcnow(),
@@ -1103,9 +1127,13 @@ def summarize(
                             cluster_summarizer.last_cluster_info,
                             umap_embeddings=cluster_summarizer.last_umap_embeddings,
                         )
-                        click.echo(f"Saved clustering visualization to {output_dir}/clustering_visualization.png")
+                        click.echo(
+                            f"Saved clustering visualization to {output_dir}/clustering_visualization.png"
+                        )
                     except Exception as e:
-                        click.echo(f"Warning: Failed to generate clustering visualization: {e}", err=True)
+                        click.echo(
+                            f"Warning: Failed to generate clustering visualization: {e}", err=True
+                        )
 
         asyncio.run(run_summarization())
         click.echo(f"Done! Summarization complete using method: {method}")
@@ -1114,6 +1142,7 @@ def summarize(
         click.echo(f"Error during summarization: {e}", err=True)
         if ctx.obj.get("verbose"):
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

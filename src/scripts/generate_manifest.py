@@ -367,6 +367,7 @@ def annotate_score_percentiles(sessions: list[Dict[str, Any]]) -> None:
             percentiles = session.setdefault("score_percentiles", {})
             percentiles[score_name] = percentile_rank
 
+
 def generate_manifest(
     input_dir: str,
     output_file: str,
@@ -416,7 +417,9 @@ def generate_manifest(
     # Apply session limits if specified (random sampling)
     if max_sessions is not None:
         if len(sessions) > max_sessions:
-            print(f"\nRandomly sampling {max_sessions} sessions from {len(sessions)} total sessions")
+            print(
+                f"\nRandomly sampling {max_sessions} sessions from {len(sessions)} total sessions"
+            )
             random.seed(42)  # Fixed seed for reproducibility
             sessions = random.sample(sessions, max_sessions)
 

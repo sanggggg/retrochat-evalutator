@@ -72,7 +72,9 @@ class TestValidationMetricsCommand:
             sample_validation_report.to_json(report_path)
 
             runner = CliRunner()
-            result = runner.invoke(main, ["validation-metrics", str(report_path), "--show-sessions"])
+            result = runner.invoke(
+                main, ["validation-metrics", str(report_path), "--show-sessions"]
+            )
 
             assert result.exit_code == 0
             assert "Per-Session Results:" in result.output

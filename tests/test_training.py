@@ -274,7 +274,9 @@ class TestTrainer:
         assert isinstance(raw_rubrics_map, dict)
 
     @pytest.mark.asyncio
-    async def test_save_rubrics(self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list):
+    async def test_save_rubrics(
+        self, fixtures_dir: Path, mock_manifest_path: Path, sample_rubric_list
+    ):
         """Test saving rubrics to folder structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             prompts_dir = Path(tmpdir) / "prompts"
@@ -368,7 +370,9 @@ class TestTrainer:
             assert saved_data == [res.model_dump(mode="json") for res in session_results]
 
             metadata = json.loads((result_folder / "metadata.json").read_text(encoding="utf-8"))
-            assert metadata["validation"]["session_results_file"] == "session-validation-results.json"
+            assert (
+                metadata["validation"]["session_results_file"] == "session-validation-results.json"
+            )
             assert metadata["validation"]["session_results_count"] == len(session_results)
 
 

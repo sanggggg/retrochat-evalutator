@@ -40,7 +40,9 @@ def save_clustering_visualization(
     source_embeddings = umap_embeddings if umap_embeddings is not None else embeddings
     method_name = "UMAP" if umap_embeddings is not None else "original"
 
-    logger.info(f"Using {method_name} embeddings (shape: {source_embeddings.shape}) for visualization")
+    logger.info(
+        f"Using {method_name} embeddings (shape: {source_embeddings.shape}) for visualization"
+    )
 
     # Reduce dimensions to 2D using t-SNE
     if len(source_embeddings) < 2:

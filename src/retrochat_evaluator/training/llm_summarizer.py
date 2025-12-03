@@ -69,9 +69,7 @@ class RubricSummarizer:
             for batch_idx, chunk in enumerate(
                 self._chunk_rubrics(collected, self.max_batch_size), 1
             ):
-                logger.debug(
-                    "Processing rubric chunk %s with %s entries", batch_idx, len(chunk)
-                )
+                logger.debug("Processing rubric chunk %s with %s entries", batch_idx, len(chunk))
                 chunk_rubrics, chunk_notes = await self._summarize_batch(chunk)
                 aggregated.extend(chunk_rubrics)
                 if chunk_notes:

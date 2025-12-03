@@ -428,12 +428,9 @@ class Trainer:
             logger.info(f"Created empty raw-rubrics.json at {raw_rubrics_path}")
 
         # 4. Generate clustering visualization if semantic clustering was used
-        is_cluster_method = (
-            method_name == "cluster"
-            or (
-                method_name is None
-                and self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING
-            )
+        is_cluster_method = method_name == "cluster" or (
+            method_name is None
+            and self.config.summarization_method == SummarizationMethod.SEMANTIC_CLUSTERING
         )
         if (
             is_cluster_method

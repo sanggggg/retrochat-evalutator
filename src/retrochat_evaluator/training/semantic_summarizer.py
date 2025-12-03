@@ -187,10 +187,7 @@ class SemanticClusteringSummarizer:
         umap_embeddings = reducer.fit_transform(embeddings)
 
         # Step 2: Clustering with HDBSCAN
-        logger.info(
-            f"Clustering with HDBSCAN: "
-            f"min_cluster_size={self.min_cluster_size}"
-        )
+        logger.info(f"Clustering with HDBSCAN: " f"min_cluster_size={self.min_cluster_size}")
 
         clusterer = hdbscan.HDBSCAN(
             min_cluster_size=self.min_cluster_size,
@@ -232,7 +229,11 @@ class SemanticClusteringSummarizer:
 
         # Assign new cluster IDs to noise points (-1)
         # Each noise point becomes its own cluster
-        max_cluster_id = max(c for c in unique_clusters if c >= 0) if any(c >= 0 for c in unique_clusters) else -1
+        max_cluster_id = (
+            max(c for c in unique_clusters if c >= 0)
+            if any(c >= 0 for c in unique_clusters)
+            else -1
+        )
         noise_indices = np.where(clusters == -1)[0]
         for i, noise_idx in enumerate(noise_indices):
             new_cluster_id = max_cluster_id + 1 + i

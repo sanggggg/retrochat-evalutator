@@ -132,6 +132,7 @@ class ValidationReport(BaseModel):
 
             # Handle NaN values (e.g., when one variable has zero variance)
             import math
+
             if math.isnan(result.statistic) or math.isnan(result.pvalue):
                 return None, None
 
